@@ -2,6 +2,9 @@ import re
 from enum import Enum, auto
 
 class Token(Enum):
+    # ------------ SPECIAL
+    WHITESPACE = auto()
+    # ------------ KEYWORDS
     ALIGNAS = auto()
     ALIGNOF = auto()
     AUTO = auto()
@@ -61,125 +64,117 @@ class Token(Enum):
     _NORETURN = auto()
     _STATIC_ASSERT = auto()
     _THREAD_LOCAL = auto()
-
-ALIGNAS  = Token.ALIGNAS 
-ALIGNOF  = Token.ALIGNOF 
-AUTO = Token.AUTO
-BOOL  = Token.BOOL 
-BREAK = Token.BREAK
-CASE = Token.CASE
-CHAR = Token.CHAR
-CONST = Token.CONST
-CONSTEXPR  = Token.CONSTEXPR 
-CONTINUE = Token.CONTINUE
-DEFAULT = Token.DEFAULT
-DO = Token.DO
-DOUBLE = Token.DOUBLE
-ELSE = Token.ELSE
-ENUM = Token.ENUM
-EXTERN = Token.EXTERN
-FALSE  = Token.FALSE 
-FLOAT = Token.FLOAT
-FOR = Token.FOR
-GOTO = Token.GOTO
-IF = Token.IF
-INLINE  = Token.INLINE 
-INT = Token.INT
-LONG = Token.LONG
-NULLPTR  = Token.NULLPTR 
-REGISTER = Token.REGISTER
-RESTRICT  = Token.RESTRICT 
-RETURN = Token.RETURN
-SHORT = Token.SHORT
-SIGNED = Token.SIGNED
-SIZEOF = Token.SIZEOF
-STATIC = Token.STATIC
-STATIC_ASSERT  = Token.STATIC_ASSERT 
-STRUCT = Token.STRUCT
-SWITCH = Token.SWITCH
-THREAD_LOCAL  = Token.THREAD_LOCAL 
-TRUE  = Token.TRUE 
-TYPEDEF = Token.TYPEDEF
-TYPEOF  = Token.TYPEOF 
-TYPEOF_UNQUAL  = Token.TYPEOF_UNQUAL 
-UNION = Token.UNION
-UNSIGNED = Token.UNSIGNED
-VOID = Token.VOID
-VOLATILE = Token.VOLATILE
-WHILE = Token.WHILE
-_ALIGNAS  = Token._ALIGNAS 
-_ALIGNOF  = Token._ALIGNOF 
-_ATOMIC  = Token._ATOMIC 
-_BITINT  = Token._BITINT 
-_BOOL  = Token._BOOL 
-_COMPLEX  = Token._COMPLEX 
-_DECIMAL128  = Token._DECIMAL128 
-_DECIMAL32  = Token._DECIMAL32 
-_DECIMAL64  = Token._DECIMAL64 
-_GENERIC  = Token._GENERIC 
-_IMAGINARY  = Token._IMAGINARY 
-_NORETURN  = Token._NORETURN 
-_STATIC_ASSERT  = Token._STATIC_ASSERT 
-_THREAD_LOCAL = Token._THREAD_LOCAL
+    
+    # ------------ OPERATORS
+    PLUS = auto()
+    MINUS = auto()
+    STAR = auto()
+    SLASH = auto()
+    PERCENT = auto()
+    INCREMENT = auto()
+    DECREMENT = auto()
+    
+    # ------------ PUNCTUATORS
+    LPAREN = auto()
+    RPAREN = auto()
+    LBRACKET = auto()
+    RBRACKET = auto()
+    LBRACE = auto()
+    RBRACE = auto()
+    COMMA = auto()
+    COLON = auto()
+    SEMICOLON = auto()
+    
+    
+    # ------------ OTHER
+    
+    IDENTIFIER = auto()
+    INTEGER = auto()
+    DOT = auto()
+    
 
 regex = {
-    ALIGNAS: re.compile(r'\s*\balignas\b'),
-    ALIGNOF: re.compile(r'\s*\balignof\b'),
-    AUTO: re.compile(r'\s*\bauto\b'),
-    BOOL: re.compile(r'\s*\bbool\b'),
-    BREAK: re.compile(r'\s*\bbreak\b'),
-    CASE: re.compile(r'\s*\bcase\b'),
-    CHAR: re.compile(r'\s*\bchar\b'),
-    CONST: re.compile(r'\s*\bconst\b'),
-    CONSTEXPR: re.compile(r'\s*\bconstexpr\b'),
-    CONTINUE: re.compile(r'\s*\bcontinue\b'),
-    DEFAULT: re.compile(r'\s*\bdefault\b'),
-    DO: re.compile(r'\s*\bdo\b'),
-    DOUBLE: re.compile(r'\s*\bdouble\b'),
-    ELSE: re.compile(r'\s*\belse\b'),
-    ENUM: re.compile(r'\s*\benum\b'),
-    EXTERN: re.compile(r'\s*\bextern\b'),
-    FALSE: re.compile(r'\s*\bfalse\b'),
-    FLOAT: re.compile(r'\s*\bfloat\b'),
-    FOR: re.compile(r'\s*\bfor\b'),
-    GOTO: re.compile(r'\s*\bgoto\b'),
-    IF: re.compile(r'\s*\bif\b'),
-    INLINE: re.compile(r'\s*\binline\b'),
-    INT: re.compile(r'\s*\bint\b'),
-    LONG: re.compile(r'\s*\blong\b'),
-    NULLPTR: re.compile(r'\s*\bnullptr\b'),
-    REGISTER: re.compile(r'\s*\bregister\b'),
-    RESTRICT: re.compile(r'\s*\brestrict\b'),
-    RETURN: re.compile(r'\s*\breturn\b'),
-    SHORT: re.compile(r'\s*\bshort\b'),
-    SIGNED: re.compile(r'\s*\bsigned\b'),
-    SIZEOF: re.compile(r'\s*\bsizeof\b'),
-    STATIC: re.compile(r'\s*\bstatic\b'),
-    STATIC_ASSERT: re.compile(r'\s*\bstatic_assert\b'),
-    STRUCT: re.compile(r'\s*\bstruct\b'),
-    SWITCH: re.compile(r'\s*\bswitch\b'),
-    THREAD_LOCAL: re.compile(r'\s*\bthread_local\b'),
-    TRUE: re.compile(r'\s*\btrue\b'),
-    TYPEDEF: re.compile(r'\s*\btypedef\b'),
-    TYPEOF: re.compile(r'\s*\btypeof\b'),
-    TYPEOF_UNQUAL: re.compile(r'\s*\btypeof_unqual\b'),
-    UNION: re.compile(r'\s*\bunion\b'),
-    UNSIGNED: re.compile(r'\s*\bunsigned\b'),
-    VOID: re.compile(r'\s*\bvoid\b'),
-    VOLATILE: re.compile(r'\s*\bvolatile\b'),
-    WHILE: re.compile(r'\s*\bwhile\b'),
-    _ALIGNAS: re.compile(r'\s*\b_Alignas\b'),
-    _ALIGNOF: re.compile(r'\s*\b_Alignof\b'),
-    _ATOMIC: re.compile(r'\s*\b_Atomic\b'),
-    _BITINT: re.compile(r'\s*\b_BitInt\b'),
-    _BOOL: re.compile(r'\s*\b_Bool\b'),
-    _COMPLEX: re.compile(r'\s*\b_Complex\b'),
-    _DECIMAL128: re.compile(r'\s*\b_Decimal128\b'),
-    _DECIMAL32: re.compile(r'\s*\b_Decimal32\b'),
-    _DECIMAL64: re.compile(r'\s*\b_Decimal64\b'),
-    _GENERIC: re.compile(r'\s*\b_Generic\b'),
-    _IMAGINARY: re.compile(r'\s*\b_Imaginary\b'),
-    _NORETURN: re.compile(r'\s*\b_Noreturn\b'),
-    _STATIC_ASSERT: re.compile(r'\s*\b_Static_assert\b'),
-    _THREAD_LOCAL: re.compile(r'\s*\b_Thread_local\b'),
+    Token.WHITESPACE: re.compile(r'\s+'),
+    Token.ALIGNAS: re.compile(r'\balignas\b'),
+    Token.ALIGNOF: re.compile(r'\balignof\b'),
+    Token.AUTO: re.compile(r'\bauto\b'),
+    Token.BOOL: re.compile(r'\bbool\b'),
+    Token.BREAK: re.compile(r'\bbreak\b'),
+    Token.CASE: re.compile(r'\bcase\b'),
+    Token.CHAR: re.compile(r'\bchar\b'),
+    Token.CONST: re.compile(r'\bconst\b'),
+    Token.CONSTEXPR: re.compile(r'\bconstexpr\b'),
+    Token.CONTINUE: re.compile(r'\bcontinue\b'),
+    Token.DEFAULT: re.compile(r'\bdefault\b'),
+    Token.DO: re.compile(r'\bdo\b'),
+    Token.DOUBLE: re.compile(r'\bdouble\b'),
+    Token.ELSE: re.compile(r'\belse\b'),
+    Token.ENUM: re.compile(r'\benum\b'),
+    Token.EXTERN: re.compile(r'\bextern\b'),
+    Token.FALSE: re.compile(r'\bfalse\b'),
+    Token.FLOAT: re.compile(r'\bfloat\b'),
+    Token.FOR: re.compile(r'\bfor\b'),
+    Token.GOTO: re.compile(r'\bgoto\b'),
+    Token.IF: re.compile(r'\bif\b'),
+    Token.INLINE: re.compile(r'\binline\b'),
+    Token.INT: re.compile(r'\bint\b'),
+    Token.LONG: re.compile(r'\blong\b'),
+    Token.NULLPTR: re.compile(r'\bnullptr\b'),
+    Token.REGISTER: re.compile(r'\bregister\b'),
+    Token.RESTRICT: re.compile(r'\brestrict\b'),
+    Token.RETURN: re.compile(r'\breturn\b'),
+    Token.SHORT: re.compile(r'\bshort\b'),
+    Token.SIGNED: re.compile(r'\bsigned\b'),
+    Token.SIZEOF: re.compile(r'\bsizeof\b'),
+    Token.STATIC: re.compile(r'\bstatic\b'),
+    Token.STATIC_ASSERT: re.compile(r'\bstatic_assert\b'),
+    Token.STRUCT: re.compile(r'\bstruct\b'),
+    Token.SWITCH: re.compile(r'\bswitch\b'),
+    Token.THREAD_LOCAL: re.compile(r'\bthread_local\b'),
+    Token.TRUE: re.compile(r'\btrue\b'),
+    Token.TYPEDEF: re.compile(r'\btypedef\b'),
+    Token.TYPEOF: re.compile(r'\btypeof\b'),
+    Token.TYPEOF_UNQUAL: re.compile(r'\btypeof_unqual\b'),
+    Token.UNION: re.compile(r'\bunion\b'),
+    Token.UNSIGNED: re.compile(r'\bunsigned\b'),
+    Token.VOID: re.compile(r'\bvoid\b'),
+    Token.VOLATILE: re.compile(r'\bvolatile\b'),
+    Token.WHILE: re.compile(r'\bwhile\b'),
+    Token._ALIGNAS: re.compile(r'\b_Alignas\b'),
+    Token._ALIGNOF: re.compile(r'\b_Alignof\b'),
+    Token._ATOMIC: re.compile(r'\b_Atomic\b'),
+    Token._BITINT: re.compile(r'\b_BitInt\b'),
+    Token._BOOL: re.compile(r'\b_Bool\b'),
+    Token._COMPLEX: re.compile(r'\b_Complex\b'),
+    Token._DECIMAL128: re.compile(r'\b_Decimal128\b'),
+    Token._DECIMAL32: re.compile(r'\b_Decimal32\b'),
+    Token._DECIMAL64: re.compile(r'\b_Decimal64\b'),
+    Token._GENERIC: re.compile(r'\b_Generic\b'),
+    Token._IMAGINARY: re.compile(r'\b_Imaginary\b'),
+    Token._NORETURN: re.compile(r'\b_Noreturn\b'),
+    Token._STATIC_ASSERT: re.compile(r'\b_Static_assert\b'),
+    Token._THREAD_LOCAL: re.compile(r'\b_Thread_local\b'),
+    Token.INTEGER: re.compile(r'\d+(?![\.\d])'),
+    Token.DOT: re.compile(r'\.'),
+    # ------------ OPERATORS
+    Token.PLUS: re.compile(r'\+'),
+    Token.MINUS: re.compile(r'\-'),
+    Token.STAR: re.compile(r'\*'),
+    Token.SLASH: re.compile(r'\/'),
+    Token.PERCENT: re.compile(r'\%'),
+    Token.INCREMENT: re.compile(r'\+\+'),
+    Token.DECREMENT: re.compile(r'\-\-'),
+    # ------------ PUNCTUATORS
+    Token.LPAREN: re.compile(r'\('),
+    Token.RPAREN: re.compile(r'\)'),
+    Token.LBRACKET: re.compile(r'\['),
+    Token.RBRACKET: re.compile(r'\]'),
+    Token.LBRACE: re.compile(r'\{'),
+    Token.RBRACE: re.compile(r'\}'),
+    Token.COMMA: re.compile(r'\,'),
+    Token.COLON: re.compile(r'\:'),
+    Token.SEMICOLON: re.compile(r'\;'),
+    
+    
+    Token.IDENTIFIER: re.compile(r'[a-zA-Z_][a-zA-Z0-9_]*'),
 }
