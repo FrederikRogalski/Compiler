@@ -41,8 +41,6 @@ class Parser:
         return OrParser(self, other)
     def __and__(self, other):
         return AndParser(self, other)
-    def __add__(self, other):
-        return AddParser(self, other)
     def many(self):
         return ManyParser(self)
     def maybe(self, default):
@@ -66,19 +64,7 @@ class OrParser(LogicalParser):
         return None, 0
 
 class AndParser(LogicalParser):
-    def __init__(self, *parsers):
-        self.parsers = parsers
-    def parse(self, toks):
-        parsed = []
-        stop = 0
-        for parser in self.parsers:
-            p, s = parser.parse(toks[stop:])
-            if p is None: return None, 0
-            parsed.append(p)
-            stop += s
-        return parsed, stop
-
-class AddParser(LogicalParser):
+    """This parser will return a list of the results of the parsers it contains if all of them succeed."""
     def __init__(self, *parsers):
         self.parsers = parsers
     def parse(self, toks):
@@ -138,63 +124,6 @@ class ConstantParser(Parser):
         self.value = value
     def parse(self, toks):
         return self.value, 0
-@dataclass
-class BinaryExpression(Parser):
-    left: "Expression"
-    operator: str
-    right: "Expression"
-    @classmethod
-    def parse(cls, toks):
-        o = Offset()
-        unary_expression, stop = UnaryExpression.parse(toks)
-        if not unary_expression:
-            primary_expression, stop = PrimaryExpression.parse(toks)
-            if not primary_expression: return None, 0
-        o += stop
-        if toks[o.value][0] != 'OPERATOR': return None, 0
-        operator = toks[o.value][1]
-        expression, stop = Expression.parse(toks[o.inc():])
-        if not expression: return None, 0
-        return cls(unary_expression or primary_expression, operator, expression), o.value + stop
-    
-@dataclass
-class UnaryExpression(Parser):
-    operator: str
-    expression: "Expression"
-    @classmethod
-    def parse(cls, toks):
-        if toks[0][0] != 'OPERATOR': return None, 0
-        operator = toks[0][1]
-        expression, stop = Expression.parse(toks[1:])
-        if not expression: return None, 0
-        return cls(operator, expression), 1 + stop
-
-@dataclass
-class PrimaryExpression(Parser):
-    value: str
-    @classmethod
-    def parse(cls, toks):
-        if toks[0][0] == 'IDENTIFIER' or toks[0][0] == 'INTEGER': return cls(toks[0][1]), 1
-        return None, 0
-
-class ReflectionParser(Parser):
-    def parse(self, toks):
-        # The reflection parser is a placeholder, that gets replaced by calling the classmethod replace.
-        # It allows us to define recursive parsers.
-        # This parser will never be called.
-        # we raise an error if it is called, so we can see where we forgot to replace it.
-        raise ValueError("ReflectionParser was not replaced.")
-    @classmethod
-    def replace(cls, parser):
-        cls._replace(parser, parser)
-    @classmethod
-    def _replace(cls, parser, replace_with):
-        if not isinstance(parser, LogicalParser): return
-        for i,p in enumerate(parser.parsers):
-            if isinstance(p, cls):
-                parser.parsers[i] = replace_with
-            else:
-                cls._replace(p, replace_with)
 
 @dataclass
 class Declaration(Parser):
@@ -220,20 +149,52 @@ class Statement(Parser):
         if expression and toks[stop][0] == 'SEMICOLON': return expression, stop + 1
         return None, 0
 
-# NoneParser
-class NP(Parser):
-    def parse(self, toks):
-        return None, 0
+@dataclass
+class ReturnStatement:
+    expression: "Expression"
+    @classmethod
+    def parse(cls, toks):
+        if toks[0][0] != 'KEYWORD' or toks[0][1] != 'return': return None, 0
+        expression, stop = Expression.parse(toks[1:])
+        if not expression: return None, 0
+        return cls(expression), 1 + stop
+
+@dataclass
+class Assignment:
+    name: str
+    expression: "Expression"
+    @classmethod
+    def parse(cls, toks):
+        if toks[0][0] != 'IDENTIFIER' or toks[1][0] != 'EQUALS': return None, 0
+        expression, stop = Expression.parse(toks[2:])
+        if not expression: return None, 0
+        return cls(toks[0][1], expression), 2 + stop
 
 LPAREN = TokenParser('LPAREN')
 RPAREN = TokenParser('RPAREN')
 COMMA = TokenParser('COMMA')
 LBRACE = TokenParser('LBRACE')
 RBRACE = TokenParser('RBRACE')
+OPERATOR = TokenParser('OPERATOR')
+IDENTIFIER = TokenParser('IDENTIFIER')
+INTEGER = TokenParser('INTEGER')
+SEMICOLON = TokenParser('SEMICOLON')
 
-Expression = OrParser(BinaryExpression, UnaryExpression, PrimaryExpression, (LPAREN & ReflectionParser & RPAREN))
-ReflectionParser.replace(Expression)
-ArgumentList = AddParser(BindParser(MaybeParser(Declaration, False), 
+class Expression(Parser):
+    parser = None
+    @classmethod
+    def parse(cls, toks):
+        return cls.parser.parse(toks)
+
+PrimaryExpression = OrParser(IDENTIFIER, INTEGER, AndParser(LPAREN, Expression, RPAREN).bind(lambda x: ConstantParser(x[1])))
+UnaryExpression = OPERATOR & Expression
+BinaryExpression = AndParser(OrParser(UnaryExpression, PrimaryExpression), OPERATOR, Expression)
+Expression.parser = OrParser(BinaryExpression, 
+                             UnaryExpression, 
+                             PrimaryExpression)
+Statement = OrParser(SEMICOLON, ReturnStatement, Declaration, Assignment, Expression)
+
+ArgumentList = AndParser(BindParser(MaybeParser(Declaration, False), 
                                     lambda arg: 
                                         (COMMA & Declaration).bind(
                                             lambda comma_dec: 
@@ -269,27 +230,6 @@ class FunctionDefinition:
         if not body: return None, 0
         return cls(name, args, body), o.inc() + stop
 
-@dataclass
-class ReturnStatement:
-    expression: Expression
-    @classmethod
-    def parse(cls, toks):
-        if toks[0][0] != 'KEYWORD' or toks[0][1] != 'return': return None, 0
-        expression, stop = Expression.parse(toks[1:])
-        if not expression: return None, 0
-        return cls(expression), 1 + stop
-
-@dataclass
-class Assignment:
-    name: str
-    expression: Expression
-    @classmethod
-    def parse(cls, toks):
-        if toks[0][0] != 'IDENTIFIER' or toks[1][0] != 'EQUALS': return None, 0
-        expression, stop = Expression.parse(toks[2:])
-        if not expression: return None, 0
-        return cls(toks[0][1], expression), 2 + stop
-
 def lexer(source_code):
     tokens = []
     i = 0
@@ -315,5 +255,16 @@ def test_argument_list():
     assert ArgumentList.parse(lexer("int a, int b")) == ([Declaration("a"), Declaration("b")], 5)
     assert ArgumentList.parse(lexer("int a, int b, int c")) == ([Declaration("a"), Declaration("b"), Declaration("c")], 8)
 
+def test_expression():
+    assert Expression.parse(lexer("1")) == ("1", 1)
+    assert Expression.parse(lexer("a")) == ("a", 1)
+    assert Expression.parse(lexer("a + 1")) == (["a", "+", "1"], 3)
+    assert Expression.parse(lexer("a + 1 + b")) == (["a", "+", ["1", "+", "b"]], 5)
+    assert Expression.parse(lexer("(a)")) == ("a", 3)
+    assert Expression.parse(lexer("(a + 1)")) == (["a", "+", "1"], 5)
+    assert Expression.parse(lexer("(a + 1) + b")) == ([["a", "+", "1"], "+", "b"], 7)
+    assert Expression.parse(lexer("a + (1 + b)")) == (["a", "+", ["1", "+", "b"]], 7)
+    
 
-test_argument_list()
+
+test_expression()
