@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from dataclasses import dataclass
 import re
 
@@ -16,6 +15,7 @@ TOKEN_TYPES = {
     'RBRACE': r'\}',  # Recognizes '}'
     'SEMICOLON': r';',  # Recognizes ';'
     'WHITESPACE': r'\s+',  # We will recognize whitespace but won't return it as a token
+    "COMMA": r',',
 }
 
 
@@ -45,9 +45,16 @@ class Parser:
         return AddParser(self, other)
     def many(self):
         return ManyParser(self)
+    def maybe(self, default):
+        return MaybeParser(self, default)
+    def bind(self, callback):
+        return BindParser(self, callback)
 
 class LogicalParser(Parser):
     parsers: list[Parser]
+    @property
+    def parser(self):
+        return self.parsers[0]
 
 class OrParser(LogicalParser):
     def __init__(self, *parsers):
@@ -55,7 +62,7 @@ class OrParser(LogicalParser):
     def parse(self, toks):
         for parser in self.parsers:
             parsed, stop = parser.parse(toks)
-            if parsed: return parsed, stop
+            if not parsed is None: return parsed, stop
         return None, 0
 
 class AndParser(LogicalParser):
@@ -66,7 +73,7 @@ class AndParser(LogicalParser):
         stop = 0
         for parser in self.parsers:
             p, s = parser.parse(toks[stop:])
-            if not p: return None, 0
+            if p is None: return None, 0
             parsed.append(p)
             stop += s
         return parsed, stop
@@ -79,7 +86,7 @@ class AddParser(LogicalParser):
         stop = 0
         for parser in self.parsers:
             p, s = parser.parse(toks[stop:])
-            if not p: return None, 0
+            if p is None: return None, 0
             parsed.append(p)
             stop += s
         return parsed, stop
@@ -87,30 +94,50 @@ class AddParser(LogicalParser):
 class ManyParser(LogicalParser):
     def __init__(self, parser):
         self.parsers = [parser]
-        self.parser = parser
     def parse(self, toks):
-        parsed = ["Many"]
+        parsed = []
         stop = 0
         while True:
             p, s = self.parser.parse(toks[stop:])
-            if not p: break
+            if p is None: break
             parsed.append(p)
             stop += s
         return parsed, stop
+
+class MaybeParser(LogicalParser):
+    def __init__(self, parser, default):
+        self.parsers = [parser]
+        self.default = default
+    def parse(self, toks):
+        parsed, stop = self.parser.parse(toks)
+        if parsed is None: return self.default, 0
+        return parsed, stop
+
+class BindParser(LogicalParser):
+    def __init__(self, parser, callback):
+        self.parsers = [parser]
+        self.callback = callback
+    def parse(self, toks):
+        stop = 0
+        p, s = self.parser.parse(toks)
+        if p is None: return None, 0
+        stop += s
+        p, s =  self.callback(p).parse(toks[stop:])
+        return p, stop + s
 
 class TokenParser(Parser):
     def __init__(self, token_type):
         self.token_type = token_type
     def parse(self, toks):
+        if len(toks) < 1: return None, 0
         if toks[0][0] == self.token_type: return toks[0][1], 1
         return None, 0
-
-LPAREN = TokenParser('LPAREN')
-RPAREN = TokenParser('RPAREN')
-COMMA = TokenParser('COMMA')
-LBRACE = TokenParser('LBRACE')
-RBRACE = TokenParser('RBRACE')
-
+    
+class ConstantParser(Parser):
+    def __init__(self, value):
+        self.value = value
+    def parse(self, toks):
+        return self.value, 0
 @dataclass
 class BinaryExpression(Parser):
     left: "Expression"
@@ -174,6 +201,7 @@ class Declaration(Parser):
     name: str
     @classmethod
     def parse(cls, toks):
+        if len(toks) < 2: return None, 0
         if toks[0][1] != 'int' or toks[1][0] != 'IDENTIFIER': return None, 0
         return cls(toks[1][1]), 2
 
@@ -197,10 +225,30 @@ class NP(Parser):
     def parse(self, toks):
         return None, 0
 
+LPAREN = TokenParser('LPAREN')
+RPAREN = TokenParser('RPAREN')
+COMMA = TokenParser('COMMA')
+LBRACE = TokenParser('LBRACE')
+RBRACE = TokenParser('RBRACE')
+
 Expression = OrParser(BinaryExpression, UnaryExpression, PrimaryExpression, (LPAREN & ReflectionParser & RPAREN))
 ReflectionParser.replace(Expression)
-ArgumentList = AddParser(Declaration, (COMMA & Declaration).many())
-Block = LBRACE & ManyParser(Statement) & RBRACE
+ArgumentList = AddParser(BindParser(MaybeParser(Declaration, False), 
+                                    lambda arg: 
+                                        (COMMA & Declaration).bind(
+                                            lambda comma_dec: 
+                                                ConstantParser(comma_dec[1])).many().maybe([]).bind(
+                                                    lambda args: 
+                                                        ConstantParser(([arg] if arg else []) + args)))).bind(
+                                                            lambda args_in_list: 
+                                                                ConstantParser(args_in_list[0]))
+
+class Block(Parser):
+    parser = (LBRACE & ManyParser(Statement) & RBRACE)
+    @classmethod
+    def parse(cls, toks):
+        block, stop = cls.parser.parse(toks)
+        return block[0][1], stop
         
 @dataclass
 class FunctionDefinition:
@@ -242,9 +290,6 @@ class Assignment:
         if not expression: return None, 0
         return cls(toks[0][1], expression), 2 + stop
 
-
-    
-
 def lexer(source_code):
     tokens = []
     i = 0
@@ -262,8 +307,13 @@ def lexer(source_code):
             raise ValueError(f"Unexpected character '{source_code[i]}' at index {i}.")
     return tokens
 
-# Test
-source_code = open("hello.c").read()
-tokens = lexer(source_code)
-parsed, stop = FunctionDefinition.parse(tokens)
-print(parsed, stop, len(tokens))
+def test_lexer():
+    assert lexer("") == []
+def test_argument_list():
+    assert ArgumentList.parse(lexer("")) == ([], 0)
+    assert ArgumentList.parse(lexer("int a")) == ([Declaration("a")], 2)
+    assert ArgumentList.parse(lexer("int a, int b")) == ([Declaration("a"), Declaration("b")], 5)
+    assert ArgumentList.parse(lexer("int a, int b, int c")) == ([Declaration("a"), Declaration("b"), Declaration("c")], 8)
+
+
+test_argument_list()
