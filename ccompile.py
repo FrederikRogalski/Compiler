@@ -192,7 +192,7 @@ BinaryExpression = AndParser(OrParser(UnaryExpression, PrimaryExpression), OPERA
 Expression.parser = OrParser(BinaryExpression, 
                              UnaryExpression, 
                              PrimaryExpression)
-Statement = OrParser(SEMICOLON, ReturnStatement, Declaration, Assignment, Expression)
+Statement = (OrParser(SEMICOLON, ReturnStatement, Declaration, Assignment, Expression) & SEMICOLON).bind(lambda x: ConstantParser(x[0]))
 
 ArgumentList = AndParser(BindParser(MaybeParser(Declaration, False), 
                                     lambda arg: 
@@ -265,6 +265,8 @@ def test_expression():
     assert Expression.parse(lexer("(a + 1) + b")) == ([["a", "+", "1"], "+", "b"], 7)
     assert Expression.parse(lexer("a + (1 + b)")) == (["a", "+", ["1", "+", "b"]], 7)
     
+def test_statement():
+    assert Statement.parse(lexer("int a;")) == (Declaration("a"), 3)
+    
 
-
-test_expression()
+test_statement()
