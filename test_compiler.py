@@ -1,7 +1,7 @@
 import pytest
 import tokens as t
 from tokens import *
-from compiler import Source, TokenParser
+from compiler import Source, TokenParser, expression
 
 
 @pytest.mark.parametrize("source, parser_token, expected_token, expected_offset", [
@@ -22,3 +22,9 @@ def test_token_parser(source, parser_token, expected_token, expected_offset):
     source = Source(source)
     assert parser.parse(source) == expected_token
     assert source.offset == expected_offset
+    
+@pytest.mark.parametrize("source, expected, expected_offset", [
+    ("1", "1", 1),
+    ("1 + 2", 3, 5),
+def test_expression_parser(
+    
