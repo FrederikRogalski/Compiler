@@ -6,23 +6,40 @@ from tokens import regex
 from typing import Callable
 from abc import ABC, abstractmethod
 
-WC1 = 20
-WC2 = 100
-COLORS = {
-    "DEBUG": "\033[94m",
-    "INFO": "\033[92m",
-    "WARNING": "\033[93m",
-    "ERROR": "\033[91m",
-}
-color = lambda s, c: f"{COLORS[c]}{s}\033[0m"
+
+
 
 logger = logging.getLogger(__name__)
+class _Debug:
+    COLORS = {
+        "DEBUG": "\033[94m",
+        "INFO": "\033[92m",
+        "WARNING": "\033[93m",
+        "ERROR": "\033[91m",
+    }
+    STAT2COL = {
+        "SOURCE": COLORS["DEBUG"],
+        "PARSING": COLORS["WARNING"],
+        "SUCCEEDED": COLORS["INFO"],
+        "FAILED": COLORS["ERROR"]
+    }
+    CALLSTACK_WIDTH = 80
+    @classmethod
+    def color(cls, s, c):
+        return f"{c}{s}\033[0m"
+    @classmethod
+    def debug(cls, status: str, source: str, callstack: list = None):
+        callstack = callstack if callstack else []
+        callstack_str = s if len(s:=" -> ".join(map(str,callstack)))<cls.CALLSTACK_WIDTH else len(callstack)*" " + str(callstack[-1])
+        logger.debug(cls.color(f'{status.ljust(20)} {callstack_str.ljust(cls.CALLSTACK_WIDTH)[:cls.CALLSTACK_WIDTH]} "{source}"', cls.STAT2COL[status]))
+
+_debug = _Debug.debug
 class Source:
     source: str
     offset: int
     callstack: list["Parser"]
     def __init__(self, source, offset=0):
-        logger.debug(f"{color('SOURCE', 'WARNING').ljust(WC1+WC2)}'{source}'")
+        _debug("SOURCE", source)
         self.source = source
         self.offset = offset
         self.callstack = []
@@ -199,25 +216,21 @@ if __name__ == "__main__":
     
     if args.verbose:
         # we inject the following code into the parser
-        def str_call(callstack):
-            s = " -> ".join(map(str,callstack))
-            return s if len(s)<WC2 else len(callstack)*" " + str(callstack[-1])
             
         def parse(self, source: Source) -> ParseResult:
             source.callstack.append(self)
-            label = str_call(source.callstack)
             offset = source.offset
-            logger.debug(f"{color('PARSING', 'WARNING').ljust(WC1)}{label.ljust(WC2)}'{source.source[source.offset:][:20]}'")
+            _debug("PARSING", source.source[offset:], source.callstack)
             parse_result = self._parse(source)
             if parse_result is not None:
-                logger.debug(f"{color('PARSED', 'INFO').ljust(WC1)}{label.ljust(WC2)}'{source.source[source.offset:offset]}")
+                _debug("SUCCEEDED", source.source[offset:source.offset], source.callstack)
             else:
-                logger.debug(f"{color('FAILED', 'ERROR').ljust(WC1)}{label.ljust(WC2)}'{source.source[source.offset:][:20]}'")
+                _debug("FAILED", source.source[offset:source.offset], source.callstack)
             source.callstack.pop()
             return parse_result
         
         Parser.parse = parse
     
-    source = Source(" 2*2 + 4")
+    source = Source("-5 +10 / 10000")
     ret = expression.parse(source)
     print(ret, source.offset)
