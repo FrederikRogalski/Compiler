@@ -92,6 +92,9 @@ class Token(Enum):
     INTEGER = auto()
     DOT = auto()
     
+    def __repr__(self):
+        return self.name
+    
 
 regex = {
     Token.WHITESPACE: re.compile(r'\s+'),
