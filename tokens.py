@@ -92,6 +92,10 @@ class Token(Enum):
     INTEGER = auto()
     DOT = auto()
     
+    @property
+    def regex(self):
+        return regex[self]
+    
     def __repr__(self):
         return f"{self.__class__.__name__}.{self.name}"
     
