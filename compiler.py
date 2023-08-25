@@ -97,20 +97,6 @@ class MaybeParser(Parser):
         if parsed is None: return self.default
         return parsed
 
-class TokenParser(Parser):
-    def __init__(self, token):
-        self.token = token
-        self._regex = token.regex
-        self.regex = re.compile(fr"[{regex[T.WHITESPACE]}]*({self._regex})")
-    def _parse(self, source: Source) -> Token | None:
-        if match := self.regex.match(source.source, source.offset):
-            source.offset = match.end()
-            return self.token, match.group(1)
-    def __repr__(self):
-        return f"TokenParser({self.token})"
-    def __str__(self):
-        return self.token.name
-
 class ConstantParser(Parser):
     def __init__(self, value: Token | Statement):
         self.value = value
@@ -119,32 +105,85 @@ class ConstantParser(Parser):
 
 constant = lambda x: ConstantParser(x) 
 
-INT = TokenParser(T.INT)
-PLUS = TokenParser(T.PLUS)
-MINUS = TokenParser(T.MINUS)
-STAR = TokenParser(T.STAR)
-SLASH = TokenParser(T.SLASH)
-PERCENT = TokenParser(T.PERCENT)
-IDENTIFIER = TokenParser(T.IDENTIFIER)
-DOT = TokenParser(T.DOT)
-LPAREN = TokenParser(T.LPAREN)
-RPAREN = TokenParser(T.RPAREN)
-LBRACKET = TokenParser(T.LBRACKET)
-RBRACKET = TokenParser(T.RBRACKET)
-LBRACE = TokenParser(T.LBRACE)
-RBRACE = TokenParser(T.RBRACE)
-COMMA = TokenParser(T.COMMA)
-COLON = TokenParser(T.COLON)
-SEMICOLON = TokenParser(T.SEMICOLON)
-INTEGER = TokenParser(T.INTEGER)
-INCREMENT = TokenParser(T.INCREMENT)
-DECREMENT = TokenParser(T.DECREMENT)
+class RegexParser(Parser):
+    def __init__(self, returns: dict[str, object], regex: str):
+        self.returns = returns
+        self.regex = regex
+        self._regex = re.compile(rf"\s*({self.regex})")
+    def _parse(self, source: Source):
+        if match := self._regex.match(source.source, source.offset):
+            source.offset = match.end()
+            # The regex was matched. Now we build the return value from the matched groups
+            return self.build_return(self.returns, match)
+        
+    @staticmethod
+    def build_return(returns: dict[str, Token | dict], match):
+        """builds the return value recursively from the matched groups"""
+        rets = []
+        for ret in returns:
+            if (s:=match.group(ret)) is not None:
+                if not isinstance(returns[ret], dict):
+                    return returns[ret], s
+                rets.append(RegexParser.build_return(returns[ret], match))
+        return tuple(rets)
+                
+            
+    @staticmethod
+    def _ids():
+        return "".join(random.choices(string.ascii_letters, k=5)), "".join(random.choices(string.ascii_letters, k=5))
+    
+    def __or__(self, other):
+        if not isinstance(other, RegexParser):
+            return OrParser(self, other)
+        id1, id2 = self._ids()
+        returns = {
+            id1: self.returns,
+            id2: other.returns
+        }
+        regex = rf"(?P<{id1}>{self.regex})|(?P<{id2}>{other.regex})"
+        return RegexParser(returns, regex)
+    
+    def __and__(self, other):
+        if not isinstance(other, RegexParser):
+            return AndParser(self, other)
+        id1, id2 = self._ids()
+        returns = {
+            id1: self.returns,
+            id2: other.returns
+        }
+        regex = rf"(?P<{id1}>{self.regex})\s*(?P<{id2}>{other.regex})"
+        return RegexParser(returns, regex)
+
+def token(token: Token):
+    return RegexParser({token.name: token}, fr"(?P<{token.name}>{token.regex})")
+
+INT = token(Token.INT)
+PLUS = token(Token.PLUS)
+MINUS = token(Token.MINUS)
+STAR = token(Token.STAR)
+SLASH = token(Token.SLASH)
+PERCENT = token(Token.PERCENT)
+IDENTIFIER = token(Token.IDENTIFIER)
+DOT = token(Token.DOT)
+LPAREN = token(Token.LPAREN)
+RPAREN = token(Token.RPAREN)
+LBRACKET = token(Token.LBRACKET)
+RBRACKET = token(Token.RBRACKET)
+LBRACE = token(Token.LBRACE)
+RBRACE = token(Token.RBRACE)
+COMMA = token(Token.COMMA)
+COLON = token(Token.COLON)
+SEMICOLON = token(Token.SEMICOLON)
+INTEGER = token(Token.INTEGER)
+INCREMENT = token(Token.INCREMENT)
+DECREMENT = token(Token.DECREMENT)
 
 
 binary_operator = PLUS | MINUS | STAR | SLASH | PERCENT
 binary_operator.name = "BIN_OP"
 unary_operator = PLUS | MINUS
 unary_operator.name = "UN_OP"
+print(binary_operator.regex)
 
 class Expression(Parser):
     pass
@@ -223,7 +262,7 @@ if __name__ == "__main__":
         
         # we inject the following code into the parser
         def parse(self, source: Source) -> ParseResult:
-            if self.name is None and not isinstance(self, TokenParser): return self._parse(source)
+            if self.name is None: return self._parse(source)
             source.callstack.append(self)
             offset = source.offset
             _debug("PARSING", source.source[offset:], source.callstack)
@@ -258,109 +297,3 @@ if __name__ == "__main__":
                 pass
     add_nodes(ret, "Top")
     g.save()
-    
-    class RegexParser(Parser):
-        def __init__(self, returns: dict[str, object], regex: str):
-            self.returns = returns
-            self.regex = regex
-            self._regex = re.compile(rf"\s*({self.regex})")
-        def _parse(self, source: Source):
-            if match := self._regex.match(source.source, source.offset):
-                source.offset = match.end()
-                # The regex was matched. Now we build the return value from the matched groups
-                return self.build_return(self.returns, match)
-            
-        @staticmethod
-        def build_return(returns: dict[str, Token | dict], match):
-            """builds the return value recursively from the matched groups"""
-            rets = []
-            for ret in returns:
-                if (s:=match.group(ret)) is not None:
-                    if not isinstance(returns[ret], dict):
-                        return returns[ret], s
-                    rets.append(RegexParser.build_return(returns[ret], match))
-            return tuple(rets)
-                    
-                
-        @staticmethod
-        def _ids():
-            return "".join(random.choices(string.ascii_letters, k=5)), "".join(random.choices(string.ascii_letters, k=5))
-        
-        def __or__(self, other):
-            if not isinstance(other, RegexParser):
-                return OrParser(self, other)
-            id1, id2 = self._ids()
-            returns = {
-                id1: self.returns,
-                id2: other.returns
-            }
-            regex = rf"(?P<{id1}>{self.regex})|(?P<{id2}>{other.regex})"
-            return RegexParser(returns, regex)
-        
-        def __and__(self, other):
-            if not isinstance(other, RegexParser):
-                return AndParser(self, other)
-            id1, id2 = self._ids()
-            returns = {
-                id1: self.returns,
-                id2: other.returns
-            }
-            regex = rf"(?P<{id1}>{self.regex})\s*(?P<{id2}>{other.regex})"
-            return RegexParser(returns, regex)
-    
-    def token(token: Token):
-        return RegexParser({token.name: token}, fr"(?P<{token.name}>{token.regex})")
-    
-    INT = token(Token.INT)
-    PLUS = token(Token.PLUS)
-    MINUS = token(Token.MINUS)
-    STAR = token(Token.STAR)
-    SLASH = token(Token.SLASH)
-    PERCENT = token(Token.PERCENT)
-    IDENTIFIER = token(Token.IDENTIFIER)
-    DOT = token(Token.DOT)
-    LPAREN = token(Token.LPAREN)
-    RPAREN = token(Token.RPAREN)
-    LBRACKET = token(Token.LBRACKET)
-    RBRACKET = token(Token.RBRACKET)
-    LBRACE = token(Token.LBRACE)
-    RBRACE = token(Token.RBRACE)
-    COMMA = token(Token.COMMA)
-    COLON = token(Token.COLON)
-    SEMICOLON = token(Token.SEMICOLON)
-    INTEGER = token(Token.INTEGER)
-    INCREMENT = token(Token.INCREMENT)
-    DECREMENT = token(Token.DECREMENT)
-
-
-    binary_operator = PLUS | MINUS | STAR | SLASH | PERCENT
-    binary_operator.name = "BIN_OP"
-    unary_operator = PLUS | MINUS
-    unary_operator.name = "UN_OP"
-
-    class Expression(Parser):
-        pass
-
-    expression = Expression()
-    print(isinstance(expression, RegexParser))
-    # Unary expressions are only allowed at the start of an expression or after an operator
-    # OrParser(IDENTIFIER, INTEGER, AndParser(LPAREN, Expression, RPAREN).bind(lambda x: ConstantParser(x[1])))
-    primary_expression = IDENTIFIER | INTEGER | (LPAREN & expression & RPAREN).bind(lambda x: constant(x[0][1]))
-    primary_expression.name = "PRIM_EXP"
-    unary_expression = unary_operator & primary_expression
-    unary_expression.name = "UN_EXP"
-    # TODO: change this to respect operator precedence
-    # Basicaly this is a recursive descent parser
-    binary_expression = (primary_expression | unary_expression) & binary_operator & expression
-    binary_expression.name = "BIN_EXP"
-    _expression = binary_expression | unary_expression | primary_expression
-    expression._parse = _expression._parse
-    expression.name = "EXP"
-    
-    
-    int_and_ident = INT & IDENTIFIER & PLUS
-    
-    print(int_and_ident.regex)
-    print(int_and_ident.parse(Source(" int abc +")))
-    print(binary_operator.regex)
-    print(expression.parse(Source("-5 * (10 +10)")))
