@@ -1,3 +1,4 @@
+import re
 import logging
 import inspect
 import argparse
@@ -46,16 +47,22 @@ class Parser(ABC):
         return self.name or self._name or self.__class__.__name__
 
 class OrParser(Parser):
+    """Non commutative or parser. Optimizes nested or parsers by flattening them."""
     def __init__(self, p1, p2):
-        self.p1 = p1
-        self.p2 = p2
         self._name = f'({p1} | {p2})'
+        self.parsers = []
+        # Optimize parser by flattening nested or parsers
+        for parser in (p1, p2):
+            if isinstance(parser, OrParser):
+                self.parsers.extend(parser.parsers)
+            else:
+                self.parsers.append(parser)
+        
     def _parse(self, source: Source) -> ParseResult:
         offset = source.offset
-        if (parsed := self.p1.parse(source)) is not None: return parsed
-        source.offset = offset
-        if (parsed := self.p2.parse(source)) is not None: return parsed
-        source.offset = offset
+        for parser in self.parsers:
+            if (parsed := parser.parse(source)) is not None: return parsed
+            source.offset = offset
 
 class AndParser(Parser):
     def __init__(self, p1, p2):
@@ -89,10 +96,11 @@ class MaybeParser(Parser):
 class TokenParser(Parser):
     def __init__(self, token):
         self.token = token
+        self.regex = re.compile(fr"[{regex[T.WHITESPACE]}]*({regex[token]})")
     def _parse(self, source: Source) -> Token | None:
-        if match := regex[self.token].match(source.source, source.offset):
+        if match := self.regex.match(source.source, source.offset):
             source.offset = match.end()
-            return self.token
+            return self.token, match.group(1)
     def __repr__(self):
         return f"TokenParser({self.token})"
     def __str__(self):
@@ -106,7 +114,6 @@ class ConstantParser(Parser):
 
 constant = lambda x: ConstantParser(x) 
 
-WHITESPACE = TokenParser(T.WHITESPACE)
 INT = TokenParser(T.INT)
 PLUS = TokenParser(T.PLUS)
 MINUS = TokenParser(T.MINUS)
@@ -228,9 +235,10 @@ if __name__ == "__main__":
     ret = expression.parse(source)
     print(ret, source.offset)
     
+    logging.getLogger("graphviz._tools").setLevel(logging.WARNING)
     import graphviz
     from uuid import uuid1
-    from typing import Iterable
+        
     g = graphviz.Digraph("out")
     p = g.node("Top")
     def add_nodes(nodes: tuple, p: str):

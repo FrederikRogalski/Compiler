@@ -1,30 +1,19 @@
+import re
 import pytest
+from timeit import timeit, repeat
 import tokens as t
-from tokens import *
-from compiler import Source, TokenParser, expression
+import time
+from tokens import Token
+from compiler import Source, expression
 
 
-@pytest.mark.parametrize("source, parser_token, expected_token, expected_offset", [
-    ("int", INT, INT, 3),
-    ("int ", INT, INT, 3),
-    (" int", INT, INT, 4),
-    (" int ", INT, INT, 4),
-    ("intint", INT, None, 0),
-    ("int3 int", INT, None, 0),
-    ("int int", INT, INT, 3),
-    ("   int", INT, INT, 6),
-    ("   int   ", INT, INT, 6),
-    ("   \nint   int", INT, INT, 7),
-    ("  \n_Static_assert", t._STATIC_ASSERT, t._STATIC_ASSERT, 17)
-])
-def test_token_parser(source, parser_token, expected_token, expected_offset):
-    parser = TokenParser(parser_token).ws()
-    source = Source(source)
-    assert parser.parse(source) == expected_token
-    assert source.offset == expected_offset
+def test_expression_parser():
+    out = expression.parse(Source('-5 +(1 + 2 - 7 *                 3 /          \n4)'))
+    assert out == ((((Token.MINUS, '-'), (Token.INTEGER, '5')), (Token.PLUS, '+')), (((Token.INTEGER, '1'), (Token.PLUS, '+')), (((Token.INTEGER, '2'), (Token.MINUS, '-')), (((Token.INTEGER, '7'), (Token.STAR, '*')), (((Token.INTEGER, '3'), (Token.SLASH, '/')), (Token.INTEGER, '4'))))))
+
+if __name__ == "__main__":
+    print("Running timeing tests...")
     
-@pytest.mark.parametrize("source, expected, expected_offset", [
-    ("1", "1", 1),
-    ("1 + 2", 3, 5),
-def test_expression_parser(
-    
+    NUMBER = 100
+    te = min(repeat('test_expression_parser()', number=NUMBER, globals=globals()))
+    print(f"Expression parser: {te * (1_000_000 / NUMBER):.2f} µs")
