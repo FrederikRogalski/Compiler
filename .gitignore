@@ -1,2 +1,5 @@
 *.gv
 .DS_Store
+.pytest_cache
+.benachmarks
+__pycache__
