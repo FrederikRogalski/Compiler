@@ -35,10 +35,31 @@ class Parser(ABC):
     regex = None
     def parse(self, source: Source) -> ParseResult:
         return self._parse(source)
-    def _or(self, *other):
-        return OrParser(self, *other)
     def __or__(self, other):
-        return OrParser(self, other)
+        _name = f"({self} | {other})"
+        tmp_regex_parsers = []
+        parsers = []
+        for parser in (self, other):
+            parsers.extend(parser.parsers if isinstance(parser, OrParser) else [parser])
+        _parsers = []
+        for parser in parsers:
+            if isinstance(p, RegexParser):
+                tmp_regex_parsers.append(p)
+                continue
+            self._append_tmp(tmp_regex_parsers, _parsers, RegexParser._or)
+            _parsers.append(p)
+        self._append_tmp(tmp_regex_parsers, _parsers, RegexParser._or)
+        ret_inst = OrParser(*_parsers) if len(_parsers) > 1 else _parsers[0]
+        ret_inst._name = _name
+        return ret_inst
+                
+    @staticmethod
+    def _append_tmp(tmp: list, parsers, aggregator):
+        if (len_tmp := len(tmp)) > 0:
+            parsers.append(tmp[0]) if len_tmp == 1 else parsers.append(aggregator(*tmp))
+            tmp.clear()
+        
+        
     def _and(self, *other):
         return AndParser(self, *other)
     def __and__(self, other):
@@ -52,40 +73,13 @@ class Parser(ABC):
 
 class OrParser(Parser):
     """Non commutative or parser. Optimizes nested or parsers by flattening them."""
-    def __init__(self, p1, p2):
-        self._name = f'({p1} | {p2})'
-        self.parsers = []
-        # Optimize parser by flattening nested or parsers
-        for parser in (p1, p2):
-            if isinstance(parser, OrParser):
-                self.parsers.extend(parser.parsers)
-            else:
-                self.parsers.append(parser)
-        # now we combine all regex parsers that follow after each other
-        _parsers = []
-        tmp = []
-        for parser in self.parsers:
-            if isinstance(parser, RegexParser):
-                tmp.append(parser)
-            else:
-                if tmp != []:
-                    if len(tmp) == 1:
-                        _parsers.append(tmp[0])
-                    else:
-                        _parsers.append(RegexParser._or(*tmp))
-                    tmp = []
-                _parsers.append(parser)
-        if tmp != []:
-            if len(tmp) == 1:
-                _parsers.append(tmp[0])
-            else:
-                _parsers.append(RegexParser._or(*tmp))
-        self._parsers = _parsers
-                
+    def __init__(self, *parsers):
+        self.parsers = parsers
         
     def _parse(self, source: Source) -> ParseResult:
-        for parser in self._parsers:
+        for parser in self.parsers:
             if (parsed := parser.parse(source)) is not None: return parsed
+    
 
 class AndParser(Parser):
     def __init__(self, p1, p2):
