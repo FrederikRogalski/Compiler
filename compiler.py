@@ -29,6 +29,11 @@ class Parser(ABC):
         return OrParser(self, other)
     def __and__(self, other):
         return AndParser(self, other)
+    def many(self):
+        return ManyParser(self)
+    def bind(self, callback: 'Parser'):
+        return BindParser(self, callback)
+        
     @abstractmethod
     def traverse(self, visitor: Visitor, backwards: bool = False): pass
     def __str__(self):
@@ -86,6 +91,33 @@ class AndParser(ParserNode):
             parseds.append(parsed)
         return parseds
 
+class ManyParser(ParserNode):
+    symbol = "*"
+    @property
+    def _name(self): return f"({self.parsers[0]}){self.symbol}"
+    def _parse(self, source: Source):
+        parseds = []
+        while (parsed:=self.parsers[0].parse(source)) is not None:
+            parseds.append(parsed)
+        return parseds[0] if len(parseds) == 1 else parseds
+
+class BindParser(ParserNode):
+    symbol = ">>"
+    def __init__(self, parser: Parser, callback: Parser):
+        self.parsers = [parser]
+        self.callback = callback
+    def _parse(self, source: Source):
+        if (parsed:=self.parsers[0].parse(source)) is None: return None
+        return self.callback(parsed).parse(source)
+
+class ConstantParser(ParserLeave):
+    def __init__(self, parsed):
+        self.parsed = parsed
+        self._name = str(parsed)
+    def _parse(self, source: Source):
+        return self.parsed
+
+
 INT = TokenParser(Token.INT)
 PLUS = TokenParser(Token.PLUS)
 MINUS = TokenParser(Token.MINUS)
@@ -117,13 +149,16 @@ binary_operator.name = "BINOP"
 unary_operator = PLUS | MINUS
 unary_operator.name = "UNOP"
 
-primary_expression = IDENTIFIER | INTEGER | (LPAREN & expression & RPAREN)
-primary_expression.name = "PRIMEXP"
-unary_expression = unary_operator & primary_expression
-unary_expression.name = "UNEXP"
-binary_expression = (primary_expression | unary_expression) & binary_operator & expression
-binary_expression.name = "BINEXP"
-expression.parsers = (binary_expression | unary_expression | primary_expression).parsers
+
+factor = OrParser()
+factor.parsers = (IDENTIFIER | INTEGER | (LPAREN & expression & RPAREN) | (unary_operator & factor)).parsers
+factor.name = "FACT"
+
+term = OrParser()
+term.parsers = ((factor & (STAR | SLASH | PERCENT) & term) | factor).parsers
+term.name = "TERM"
+
+expression.parsers = ((term & (PLUS | MINUS) & expression) | term).parsers
 unoptimized_expression = deepcopy(expression)
 
 class OptimOr(Visitor):
@@ -155,6 +190,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
+    args.verbose = True
     if args.verbose:
         import debug
         debug.init(Parser, Source)
+    s = Source("1 + 2 * 2")
+    print(expression.parse(s))
