@@ -60,13 +60,26 @@ class OrParser(Parser):
             if isinstance(parser, OrParser):
                 self.parsers.extend(parser.parsers)
             else:
-                self.parsers.append(parser)            
+                self.parsers.append(parser)
+        # now we combine all regex parsers that follow after each other
+        _parsers = []
+        tmp = []
+        for parser in self.parsers:
+            if isinstance(parser, RegexParser):
+                tmp.append(parser)
+            else:
+                if tmp != []:
+                    _parsers.append(RegexParser._or(*tmp))
+                    tmp = []
+                _parsers.append(parser)
+        if tmp != []:
+            _parsers.append(RegexParser._or(*tmp))
+        self._parsers = _parsers
+                
         
     def _parse(self, source: Source) -> ParseResult:
-        offset = source.offset
-        for parser in self.parsers:
+        for parser in self._parsers:
             if (parsed := parser.parse(source)) is not None: return parsed
-            source.offset = offset
 
 class AndParser(Parser):
     def __init__(self, p1, p2):
@@ -76,8 +89,11 @@ class AndParser(Parser):
         self._name = f'({p1} & {p2})'
     def _parse(self, source: Source) -> tuple[ParseResult]:
         offset = source.offset
-        if (parsed1 := self.p1.parse(source)) is None: return None
-        if (parsed2 := self.p2.parse(source)) is None: return None
+        if (parsed1 := self.p1.parse(source)) is None: 
+            return None
+        if (parsed2 := self.p2.parse(source)) is None: 
+            source.offset = offset
+            return None
         return (parsed1, parsed2)
 
 class BindParser(Parser):
@@ -126,21 +142,16 @@ class RegexParser(Parser):
                     return returns[ret], s
                 rets.append(RegexParser.build_return(returns[ret], match))
         return tuple(rets)
-                
-            
-    @staticmethod
-    def _ids():
-        return "".join(random.choices(string.ascii_letters, k=5)), "".join(random.choices(string.ascii_letters, k=5))
     
-    def __or__(self, other):
-        if not isinstance(other, RegexParser):
-            return OrParser(self, other)
-        id1, id2 = self._ids()
-        returns = {
-            id1: self.returns,
-            id2: other.returns
-        }
-        regex = rf"(?P<{id1}>{self.regex})|(?P<{id2}>{other.regex})"
+    @classmethod
+    def _or(cls, *parsers):
+        returns = {}
+        regex = ""
+        for parser in parsers:
+            id_parser = f"l{id(parser)}"
+            returns[id_parser] = parser.returns
+            regex += rf"(?P<{id_parser}>{parser.regex})|"
+        regex = regex[:-1]
         return RegexParser(returns, regex)
     
     def __and__(self, other):
@@ -183,7 +194,8 @@ binary_operator = PLUS | MINUS | STAR | SLASH | PERCENT
 binary_operator.name = "BIN_OP"
 unary_operator = PLUS | MINUS
 unary_operator.name = "UN_OP"
-print(binary_operator.regex)
+print(binary_operator._parsers)
+
 
 class Expression(Parser):
     pass
