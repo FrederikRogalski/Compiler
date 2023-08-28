@@ -4,7 +4,7 @@ from timeit import timeit, repeat
 import tokens as t
 import time
 from tokens import Token
-from rewrite import Source, expression
+from compiler import Source, expression
 
 
 def test_expression_parser():
