@@ -1,5 +1,5 @@
 *.gv
 .DS_Store
 .pytest_cache
-.benachmarks
-__pycache__
+.benchmarks
+__pycache__/
