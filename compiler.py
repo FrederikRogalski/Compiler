@@ -69,11 +69,17 @@ class OrParser(Parser):
                 tmp.append(parser)
             else:
                 if tmp != []:
-                    _parsers.append(RegexParser._or(*tmp))
+                    if len(tmp) == 1:
+                        _parsers.append(tmp[0])
+                    else:
+                        _parsers.append(RegexParser._or(*tmp))
                     tmp = []
                 _parsers.append(parser)
         if tmp != []:
-            _parsers.append(RegexParser._or(*tmp))
+            if len(tmp) == 1:
+                _parsers.append(tmp[0])
+            else:
+                _parsers.append(RegexParser._or(*tmp))
         self._parsers = _parsers
                 
         
@@ -83,18 +89,43 @@ class OrParser(Parser):
 
 class AndParser(Parser):
     def __init__(self, p1, p2):
-        # If one of the parsers is an and parser, we can just add its parsers to this one
-        self.p1 = p1
-        self.p2 = p2
         self._name = f'({p1} & {p2})'
-    def _parse(self, source: Source) -> tuple[ParseResult]:
+        self.parsers = []
+        for parser in (p1, p2):
+            if isinstance(parser, AndParser):
+                self.parsers.extend(parser.parsers)
+            else:
+                self.parsers.append(parser)
+        # now we combine all regex parsers that follow after each other
+        _parsers = []
+        tmp = []
+        for parser in self.parsers:
+            if isinstance(parser, RegexParser):
+                tmp.append(parser)
+            else:
+                if tmp != []:
+                    if len(tmp) == 1:
+                        _parsers.append(tmp[0])
+                    else:
+                        _parsers.append(RegexParser._and(*tmp))
+                    tmp = []
+                _parsers.append(parser)
+        if tmp != []:
+            if len(tmp) == 1:
+                _parsers.append(tmp[0])
+            else:
+                _parsers.append(RegexParser._and(*tmp))
+        self._parsers = _parsers
+    def _parse(self, source: Source) -> ParseResult:
         offset = source.offset
-        if (parsed1 := self.p1.parse(source)) is None: 
-            return None
-        if (parsed2 := self.p2.parse(source)) is None: 
-            source.offset = offset
-            return None
-        return (parsed1, parsed2)
+        parsed = []
+        for parser in self._parsers:
+            if (p := parser.parse(source)) is None:
+                source.offset = offset
+                return None
+            parsed.append(p)
+        return tuple(parsed)
+            
 
 class BindParser(Parser):
     def __init__(self, parser: Parser, callback: Callable[[ParseResult], Parser]):
@@ -126,6 +157,7 @@ class RegexParser(Parser):
         self.returns = returns
         self.regex = regex
         self._regex = re.compile(rf"\s*({self.regex})")
+        self._name = regex
     def _parse(self, source: Source):
         if match := self._regex.match(source.source, source.offset):
             source.offset = match.end()
@@ -154,16 +186,17 @@ class RegexParser(Parser):
         regex = regex[:-1]
         return RegexParser(returns, regex)
     
-    def __and__(self, other):
-        if not isinstance(other, RegexParser):
-            return AndParser(self, other)
-        id1, id2 = self._ids()
-        returns = {
-            id1: self.returns,
-            id2: other.returns
-        }
-        regex = rf"(?P<{id1}>{self.regex})\s*(?P<{id2}>{other.regex})"
+    @classmethod
+    def _and(cls, *parsers):
+        returns = {}
+        regex = ""
+        for parser in parsers:
+            id_parser = f"l{id(parser)}"
+            returns[id_parser] = parser.returns
+            regex += rf"(?P<{id_parser}>{parser.regex})"
+        regex = regex[:-1]
         return RegexParser(returns, regex)
+            
 
 def token(token: Token):
     return RegexParser({token.name: token}, fr"(?P<{token.name}>{token.regex})")
@@ -194,7 +227,6 @@ binary_operator = PLUS | MINUS | STAR | SLASH | PERCENT
 binary_operator.name = "BIN_OP"
 unary_operator = PLUS | MINUS
 unary_operator.name = "UN_OP"
-print(binary_operator._parsers)
 
 
 class Expression(Parser):
@@ -203,7 +235,8 @@ class Expression(Parser):
 expression = Expression()
 # Unary expressions are only allowed at the start of an expression or after an operator
 # OrParser(IDENTIFIER, INTEGER, AndParser(LPAREN, Expression, RPAREN).bind(lambda x: ConstantParser(x[1])))
-primary_expression = IDENTIFIER | INTEGER | (LPAREN & expression & RPAREN).bind(lambda x: constant(x[0][1]))
+lp_exp_rp = LPAREN & expression & RPAREN
+primary_expression = IDENTIFIER | INTEGER | (lp_exp_rp).bind(lambda x: constant(x[0][1]))
 primary_expression.name = "PRIM_EXP"
 unary_expression = unary_operator & primary_expression
 unary_expression.name = "UN_EXP"
@@ -274,7 +307,7 @@ if __name__ == "__main__":
         
         # we inject the following code into the parser
         def parse(self, source: Source) -> ParseResult:
-            if self.name is None: return self._parse(source)
+            # if self.name is None: return self._parse(source)
             source.callstack.append(self)
             offset = source.offset
             _debug("PARSING", source.source[offset:], source.callstack)
