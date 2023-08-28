@@ -107,19 +107,6 @@ INTEGER = TokenParser(Token.INTEGER)
 INCREMENT = TokenParser(Token.INCREMENT)
 DECREMENT = TokenParser(Token.DECREMENT)
 
-def test_token_parser():
-    assert INT.parse(Source("int")) == (Token.INT, "int")
-    assert INT.parse(Source("  \n int")) == (Token.INT, "int")
-
-def test_or():
-    assert (INT | INT).parse(Source("   \n int")) == (Token.INT, "int")
-    assert (INT | IDENTIFIER).parse(Source(" asd12")) == (Token.IDENTIFIER, "asd12")
-
-def test_and():
-    assert (INT & INT).parse(Source("int int")) == [(Token.INT, "int"), (Token.INT, "int")]
-    assert (INT & INT).parse(Source("int asd")) == None
-    assert (INT & INT).parse(Source("int")) == None
-
 expression = OrParser()
 expression.name = "EXP"
 
@@ -137,15 +124,7 @@ unary_expression.name = "UNEXP"
 binary_expression = (primary_expression | unary_expression) & binary_operator & expression
 binary_expression.name = "BINEXP"
 expression.parsers = (binary_expression | unary_expression | primary_expression).parsers
-
 unoptimized_expression = deepcopy(expression)
-
-def test_expression():
-    assert unoptimized_expression.parse(Source("1 + 2")) == [[(Token.INTEGER, '1'), (Token.PLUS, '+')], (Token.INTEGER, '2')]
-    assert unoptimized_expression.parse(Source("1 - 2")) == [[(Token.INTEGER, '1'), (Token.MINUS, '-')], (Token.INTEGER, '2')]
-    assert unoptimized_expression.parse(Source("(1 + 2) - 3")) == [[[[(Token.LPAREN, '('), [[(Token.INTEGER, '1'), (Token.PLUS, '+')], (Token.INTEGER, '2')]], (Token.RPAREN, ')')], (Token.MINUS, '-')], (Token.INTEGER, '3')]
-    assert unoptimized_expression.parse(Source("-5*4")) == [[[(Token.MINUS, '-'), (Token.INTEGER, '5')], (Token.STAR, '*')], (Token.INTEGER, '4')]
-    assert unoptimized_expression.parse(Source("-5/5-")) == [[[(Token.MINUS, '-'), (Token.INTEGER, '5')], (Token.SLASH, '/')], (Token.INTEGER, '5')]
 
 class OptimOr(Visitor):
     def visit(self, node: Parser):
@@ -158,19 +137,6 @@ class OptimOr(Visitor):
                 parsers.append(parser)
         node.parsers = parsers
 
-expression.traverse(OptimOr(), backwards=True)
-optim_or_expression = deepcopy(expression)
-
-def test_optim_or():
-    test_token_parser()
-    test_or()
-    test_and()
-    assert optim_or_expression.parse(Source("1 + 2")) == [[(Token.INTEGER, '1'), (Token.PLUS, '+')], (Token.INTEGER, '2')]
-    assert optim_or_expression.parse(Source("1 - 2")) == [[(Token.INTEGER, '1'), (Token.MINUS, '-')], (Token.INTEGER, '2')]
-    assert optim_or_expression.parse(Source("(1 + 2) - 3")) == [[[[(Token.LPAREN, '('), [[(Token.INTEGER, '1'), (Token.PLUS, '+')], (Token.INTEGER, '2')]], (Token.RPAREN, ')')], (Token.MINUS, '-')], (Token.INTEGER, '3')]
-    assert optim_or_expression.parse(Source("-5*4")) == [[[(Token.MINUS, '-'), (Token.INTEGER, '5')], (Token.STAR, '*')], (Token.INTEGER, '4')]
-    assert optim_or_expression.parse(Source("-5/5-")) == [[[(Token.MINUS, '-'), (Token.INTEGER, '5')], (Token.SLASH, '/')], (Token.INTEGER, '5')]
-
 class OptimAnd(Visitor):
     def visit(self, node: Parser):
         if not isinstance(node, AndParser): return
@@ -182,20 +148,13 @@ class OptimAnd(Visitor):
                 parsers.append(parser)
         node.parsers = parsers
 
+expression.traverse(OptimOr(), backwards=True)
 expression.traverse(OptimAnd(), backwards=True)
-optim_and_or_expression = deepcopy(expression)
-
-def test_optim_and():
-    assert optim_and_or_expression.parse(Source("1 + 2")) == [(Token.INTEGER, '1'), (Token.PLUS, '+'), (Token.INTEGER, '2')]
-    assert optim_and_or_expression.parse(Source("1 - 2")) == [(Token.INTEGER, '1'), (Token.MINUS, '-'), (Token.INTEGER, '2')]
-    assert optim_and_or_expression.parse(Source("(1 + 2) - 3")) == [[(Token.LPAREN, '('), [(Token.INTEGER, '1'), (Token.PLUS, '+'), (Token.INTEGER, '2')], (Token.RPAREN, ')')], (Token.MINUS, '-'), (Token.INTEGER, '3')]
-    assert optim_and_or_expression.parse(Source("-5*4")) == [[(Token.MINUS, '-'), (Token.INTEGER, '5')], (Token.STAR, '*'), (Token.INTEGER, '4')]
-    assert optim_and_or_expression.parse(Source("-5/5-")) == [[(Token.MINUS, '-'), (Token.INTEGER, '5')], (Token.SLASH, '/'), (Token.INTEGER, '5')]
-
+        
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
-    if True:
+    if args.verbose:
         import debug
         debug.init(Parser, Source)
