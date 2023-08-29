@@ -1,5 +1,6 @@
 import re
 import argparse
+from functools import lru_cache
 from copy import deepcopy
 from tokens import Token
 from abc import ABC, abstractmethod, abstractproperty
@@ -12,10 +13,23 @@ class Source:
         self.offset = offset
     def __repr__(self):
         return f"Source({repr(self.source)}, {self.offset})"
+    def __hash__(self):
+        return hash((self.source, self.offset))
 
 class Visitor(ABC):
     @abstractmethod
     def visit(self, host): pass
+
+def cache(func):
+    c = {}
+    def wrapper(self, source: Source):
+        h = hash((self, hash(source)))
+        if h in c: 
+            source.offset = c[h][1]
+            return c[h][0]
+        c[h] = (func(self, source), source.offset)
+        return c[h][0]
+    return wrapper
 
 class Parser(ABC):
     name: str = None
@@ -23,6 +37,7 @@ class Parser(ABC):
     _visited = False
     @abstractmethod
     def _parse(self, source: Source): pass
+    @cache
     def parse(self, source: Source):
         return self._parse(source)
     def __or__(self, other):
@@ -76,7 +91,7 @@ class OrParser(ParserNode):
     symbol = "|"
     def _parse(self, source: Source):
         for parser in self.parsers:
-            if (parsed:=parser.parse(source)) is not None: 
+            if (parsed:=parser.parse(source)) is not None:
                 return parsed
 
 class AndParser(ParserNode):
@@ -190,9 +205,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
-    args.verbose = True
     if args.verbose:
         import debug
         debug.init(Parser, Source)
-    s = Source("1 + 2 * 2")
-    print(expression.parse(s))
+    print(expression.parse(Source('-5 + 5')))

@@ -1,4 +1,5 @@
 import logging
+from compiler import cache
 
 logger = logging.getLogger(__name__)
 
@@ -48,13 +49,15 @@ def init(Parser, Source):
     
     Source.__init__ = source_init
     
+    p = Parser.parse
+    
     # we inject the following code into the parser
     def parse(self, source: Source):
         # if self.name is None: return self._parse(source)
         source.callstack.append(self)
         offset = source.offset
         _debug("PARSING", source.source[offset:], source.callstack)
-        parse_result = self._parse(source)
+        parse_result = p(self, source)
         if parse_result is not None:
             _debug("SUCCEEDED", source.source[offset:source.offset], source.callstack)
         else:
