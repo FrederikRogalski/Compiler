@@ -8,9 +8,11 @@ from abc import ABC, abstractmethod, abstractproperty
 class Source:
     source: str
     offset: int
+    cache: dict[int, tuple[any, int]]
     def __init__(self, source: str, offset=0):
         self.source = source
         self.offset = offset
+        self.cache = {}
     def __repr__(self):
         return f"Source({repr(self.source)}, {self.offset})"
     def __hash__(self):
@@ -21,14 +23,14 @@ class Visitor(ABC):
     def visit(self, host): pass
 
 def cache(func):
-    c = {}
+    
     def wrapper(self, source: Source):
         h = hash((self, hash(source)))
-        if h in c: 
-            source.offset = c[h][1]
-            return c[h][0]
-        c[h] = (func(self, source), source.offset)
-        return c[h][0]
+        if h in source.cache: 
+            source.offset = source.cache[h][1]
+            return source.cache[h][0]
+        source.cache[h] = (func(self, source), source.offset)
+        return source.cache[h][0]
     return wrapper
 
 class Parser(ABC):
