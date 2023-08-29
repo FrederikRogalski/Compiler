@@ -59,7 +59,6 @@ def test_optimizer_and_or_equals_or_and():
     assert and_or.parse(Source("(1 + 2) - 3")) == or_and.parse(Source("(1 + 2) - 3"))
     assert and_or.parse(Source("-5*4")) == or_and.parse(Source("-5*4"))
     assert and_or.parse(Source("-5/5-")) == or_and.parse(Source("-5/5-"))
-    assert False
 
 
 if __name__ == "__main__":
