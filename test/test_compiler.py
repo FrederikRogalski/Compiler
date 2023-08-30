@@ -1,7 +1,7 @@
 from copy import deepcopy
 from timeit import repeat
-from compiler.tokens import Token
-from compiler.compiler import Source, expression, unoptimized_expression, OptimOr, OptimAnd, TokenParser
+from ccompiler.tokens import Token
+from ccompiler.compiler import Source, expression, unoptimized_expression, OrOptimizer, AndOptimizer, TokenParser
 
 INT = TokenParser(Token.INT)
 IDENTIFIER = TokenParser(Token.IDENTIFIER)
@@ -31,7 +31,7 @@ def test_unoptimized_expression():
 
 def test_optimized_or():
     optimized_or_expression = deepcopy(unoptimized_expression)
-    optimized_or_expression.traverse(OptimOr(), backwards=True)
+    optimized_or_expression.traverse(OrOptimizer(), backwards=True)
     assert optimized_or_expression.parse(Source("1 + 2")) == [[(Token.INTEGER, '1'), (Token.PLUS, '+')], (Token.INTEGER, '2')]
     assert optimized_or_expression.parse(Source("1 - 2")) == [[(Token.INTEGER, '1'), (Token.MINUS, '-')], (Token.INTEGER, '2')]
     assert optimized_or_expression.parse(Source("(1 + 2) - 3")) == [[[[(Token.LPAREN, '('), [[(Token.INTEGER, '1'), (Token.PLUS, '+')], (Token.INTEGER, '2')]], (Token.RPAREN, ')')], (Token.MINUS, '-')], (Token.INTEGER, '3')]
@@ -40,7 +40,7 @@ def test_optimized_or():
 
 def test_optimized_and():
     optimized_and_expression = deepcopy(unoptimized_expression)
-    optimized_and_expression.traverse(OptimAnd(), backwards=True)
+    optimized_and_expression.traverse(AndOptimizer(), backwards=True)
     assert optimized_and_expression.parse(Source("1 + 2")) == [(Token.INTEGER, '1'), (Token.PLUS, '+'), (Token.INTEGER, '2')]
     assert optimized_and_expression.parse(Source("1 - 2")) == [(Token.INTEGER, '1'), (Token.MINUS, '-'), (Token.INTEGER, '2')]
     assert optimized_and_expression.parse(Source("(1 + 2) - 3")) == [[(Token.LPAREN, '('), [(Token.INTEGER, '1'), (Token.PLUS, '+'), (Token.INTEGER, '2')], (Token.RPAREN, ')')], (Token.MINUS, '-'), (Token.INTEGER, '3')]
@@ -50,10 +50,10 @@ def test_optimized_and():
 def test_optimizer_and_or_equals_or_and():
     and_or = deepcopy(unoptimized_expression)
     or_and = deepcopy(unoptimized_expression)
-    and_or.traverse(OptimAnd(), backwards=True)
-    and_or.traverse(OptimOr(), backwards=True)
-    or_and.traverse(OptimOr(), backwards=True)
-    or_and.traverse(OptimAnd(), backwards=True)
+    and_or.traverse(AndOptimizer(), backwards=True)
+    and_or.traverse(OrOptimizer(), backwards=True)
+    or_and.traverse(OrOptimizer(), backwards=True)
+    or_and.traverse(AndOptimizer(), backwards=True)
     assert and_or.parse(Source("1 + 2")) == or_and.parse(Source("1 + 2"))
     assert and_or.parse(Source("1 - 2")) == or_and.parse(Source("1 - 2"))
     assert and_or.parse(Source("(1 + 2) - 3")) == or_and.parse(Source("(1 + 2) - 3"))

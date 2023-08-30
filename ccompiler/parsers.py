@@ -1,11 +1,8 @@
 import re
-from compiler.tokens import Token
+from ccompiler.tokens import Token
+from ccompiler.util import Visitor, Visitable
 from collections import OrderedDict
-from abc import ABC, abstractmethod, abstractproperty
-
-class Visitor(ABC):
-    @abstractmethod
-    def visit(self, host): pass
+from abc import abstractmethod, abstractproperty
 
 class Cache(OrderedDict):
     def __init__(self, maxsize=128):
@@ -39,7 +36,7 @@ class Source:
     def __hash__(self):
         return hash((self.source, self.offset))
 
-class Parser(ABC):
+class Parser(Visitable):
     name: str = None
     _name: str = None
     _visited = False
@@ -57,9 +54,6 @@ class Parser(ABC):
         return ManyParser(self)
     def bind(self, callback: 'Parser'):
         return BindParser(self, callback)
-        
-    @abstractmethod
-    def traverse(self, visitor: Visitor, backwards: bool = False): pass
     def __str__(self):
         return self.name or self._name or self.__class__.__name__
 

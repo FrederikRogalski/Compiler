@@ -1,7 +1,7 @@
 from copy import deepcopy
-from compiler.tokens import Token
-from compiler.optim import OptimOr, OptimAnd
-from compiler.parsers import Source, Parser, TokenParser, OrParser, ConstantParser
+from ccompiler.tokens import Token
+from ccompiler.optim import OrOptimizer, AndOptimizer
+from ccompiler.parsers import Source, Parser, TokenParser, OrParser, ConstantParser
 
 
 INT = TokenParser(Token.INT)
@@ -81,10 +81,10 @@ function.name = "FUNC"
 top = (function | statement).many()
 top.name = "TOP"
 
-top.traverse(OptimOr(), backwards=True)
-top.traverse(OptimAnd(), backwards=True)
-        
-if __name__ == "__main__":
+OrOptimizer.optimize(top)
+AndOptimizer.optimize(top)
+
+def main():
     import sys
     import argparse
     from pprint import pprint
@@ -98,8 +98,11 @@ if __name__ == "__main__":
     assert not (args.string and args.input and not input_is_stdin), "Cannot provide both input file and string"
     
     if args.verbose:
-        import debug
+        import ccompiler.debug as debug
         debug.init(Parser, Source)
     
     source = Source(args.string or args.input.read())
     pprint(top.parse(source))
+
+if __name__ == "__main__":
+    main()

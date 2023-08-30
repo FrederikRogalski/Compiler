@@ -1,5 +1,4 @@
 import logging
-from compiler import cache
 
 logger = logging.getLogger(__name__)
 
