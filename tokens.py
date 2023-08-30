@@ -88,6 +88,7 @@ class Token(Enum):
     
     # ------------ OTHER
     
+    EQUALS = auto()
     IDENTIFIER = auto()
     INTEGER = auto()
     DOT = auto()
@@ -182,6 +183,6 @@ regex = {
     Token.COLON: r'\:',
     Token.SEMICOLON: r'\;',
     
-    
+    Token.EQUALS: r'\=',
     Token.IDENTIFIER: r'[a-zA-Z_][a-zA-Z0-9_]*',
 }

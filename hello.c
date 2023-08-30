@@ -1,5 +1,5 @@
-    
+int b = 10;
 int main() {
-    int a = 1*2;
-    return 1;
+    int a;
+    return (a*b + b*4)*0;
 }

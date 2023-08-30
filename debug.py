@@ -16,7 +16,7 @@ class _Debug:
         "SUCCEEDED": COLORS["INFO"],
         "FAILED": COLORS["ERROR"]
     }
-    CALLSTACK_WIDTH = 100
+    CALLSTACK_WIDTH = 120
     counter = 0
     @classmethod
     def color(cls, s, c):
@@ -40,11 +40,12 @@ def init(Parser, Source):
     logging.basicConfig(level=logging.DEBUG)
     _debug = _Debug.debug
     
+    si = Source.__init__
+    
     def source_init(self, source, offset=0):
+        si(self, source, offset)
         _Debug.counter = 0
         _debug("SOURCE", source)
-        self.source = source
-        self.offset = offset
         self.callstack = []
     
     Source.__init__ = source_init
