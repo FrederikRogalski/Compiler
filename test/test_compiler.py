@@ -1,7 +1,7 @@
 from copy import deepcopy
 from timeit import repeat
-from tokens import Token
-from compiler import Source, expression, unoptimized_expression, OptimOr, OptimAnd, TokenParser
+from compiler.tokens import Token
+from compiler.compiler import Source, expression, unoptimized_expression, OptimOr, OptimAnd, TokenParser
 
 INT = TokenParser(Token.INT)
 IDENTIFIER = TokenParser(Token.IDENTIFIER)
