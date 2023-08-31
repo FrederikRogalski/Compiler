@@ -52,8 +52,10 @@ class Parser(Visitable):
         return AndParser(self, other)
     def many(self):
         return ManyParser(self)
-    def bind(self, callback: 'Parser'):
+    def bind(self, callback):
         return BindParser(self, callback)
+    def default(self, default):
+        return self | ConstantParser(default)
     def __str__(self):
         return self.name or self._name or self.__class__.__name__
 
@@ -125,7 +127,7 @@ class BindParser(ParserNode):
         self.callback = callback
     def _parse(self, source: Source):
         if (parsed:=self.parsers[0].parse(source)) is None: return None
-        return self.callback(parsed).parse(source)
+        return self.callback(parsed)
 
 class ConstantParser(ParserLeave):
     def __init__(self, parsed):

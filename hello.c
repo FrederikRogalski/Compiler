@@ -1,5 +1,3 @@
-int b = 10;
-int main() {
-    int a;
-    return (a*b + b*4)*0;
+int main(int a, int b) {
+    return b;
 }
