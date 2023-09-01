@@ -1,3 +1,4 @@
-int main(int a, int b) {
-    return b;
+
+int main() {
+    return 0;
 }

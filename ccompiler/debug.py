@@ -56,7 +56,7 @@ def init(Parser, Source):
         # if self.name is None: return self._parse(source)
         source.callstack.append(self)
         offset = source.offset
-        _debug("PARSING", source.source[offset:], source.callstack)
+        _debug("PARSING", source.source[offset:].replace("\n", " ")[:30], source.callstack)
         parse_result = p(self, source)
         if parse_result is not None:
             _debug("SUCCEEDED", source.source[offset:source.offset], source.callstack)

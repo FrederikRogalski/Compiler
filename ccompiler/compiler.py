@@ -1,135 +1,12 @@
-from abc import abstractmethod, ABC
+import os
 from copy import deepcopy
-from numbers import Number
-from collections import OrderedDict
-from dataclasses import dataclass
 from ccompiler.tokens import Token
-from ccompiler.util import Visitor, Visitable
 from ccompiler.optim import OrOptimizer, AndOptimizer
-from ccompiler.parsers import Source, Parser, TokenParser, OrParser
+from ccompiler.parsers import Source, Parser, TokenParser, OrParser, BindParser
+from ccompiler.ast import BinaryOp, UnaryOp, Immidiate, Variable, Assignment, Definition, Return, EmptyStatement, Top, Function, Parameter, Block, Integer, Float, Arm64Program, Scope
 
 
-class Program(ABC):
-    header: list[str]
-    code: list[str]
-    text: list[str]
-    local_vars: list[OrderedDict[str, int]]
-    max_offset_sp: int
-    depth: int
-    
-    def __init__(self):
-        self._depth
-        self.variables = [OrderedDict()]
-        self.code = []
-        self.text = []
-        self.max_offset_sp = 0
-    
-    @property
-    def depth(self):
-        return self._depth
-    
-    @depth.setter
-    def depth(self, value):
-        assert value >= 0, "Indent cannot be negative"
-        if value > self._depth:
-            self.variables += [OrderedDict() for _ in range(value - self._depth)]
-        elif value < self._depth:
-            self.variables = self.variables[:value]
-        self._depth = value
-    
-    def create_local_var(self, identifier: str, size: int = 8) -> int:
-        """address is offset from stack pointer"""
-        assert identifier not in self.variables[self.depth],\
-            f"Redefinition of variable {identifier}"
-        # variable offset from sp is last variable offset from sp + size
-        self.variables[self.depth][identifier] = \
-            self.variables[self._depth][next(reversed(self.variables[self._depth]))] + size
-        self.max_offset_sp = max(self.variables[self.depth][identifier], self.max_offset_sp)
-        return self.variables[self.depth][identifier]
-    
-    def get_local_var(self, identifier: str):
-        for scope in reversed(self.variables[:self.depth]):
-            if identifier in scope:
-                return scope[identifier]
-        raise Exception(f"Variable {identifier} not found")
-    
-    @abstractmethod
-    def __str__(self): pass
 
-class Arm64Program(Program):
-    def __init__(self):
-        super().__init__()
-        self.header = [
-            ".globl _main",
-            ".p2align 2"
-        ]
-    
-    def __str__(self):
-        return "\n".join(self.header + self.code + self.text)
-
-class AstNode(ABC):
-    def emit(self, program: Program): pass
-
-@dataclass
-class Top(AstNode):
-    body: list
-    def emit(self, program: Program):
-        inner = self.body.emit(program)
-        return [
-            "_main:",
-            f"sub sp, sp, #{program.max_offset_sp}",
-            *inner
-        ]
-        
-
-@dataclass
-class Variable(AstNode):
-    identifier: str
-    
-@dataclass
-class Immidiate(AstNode):
-    type_identifier: Token
-    value: Number
-@dataclass
-class Function(AstNode):
-    return_type: Token
-    identifier: str
-    parameter_list: list
-    body: list
-
-@dataclass
-class EmptyStatement(AstNode):
-    pass
-
-@dataclass
-class Expression(AstNode):
-    pass
-
-@dataclass
-class UnaryOp(AstNode):
-    operator: Token
-    expression: Expression
-
-@dataclass
-class BinaryOp(AstNode):
-    left: Expression
-    operator: Token
-    right: Expression
-
-@dataclass
-class Return(AstNode):
-    expression: Expression
-
-@dataclass
-class Assignment(AstNode):
-    identifier: str
-    expression: Expression
-
-@dataclass
-class Definition(AstNode):
-    type_identifier: Token
-    identifier: str
-    expression: Expression = None
 
 
 INT = TokenParser(Token.INT)
@@ -162,18 +39,23 @@ RETURN = TokenParser(Token.RETURN)
 expression = OrParser()
 factor = OrParser()
 term = OrParser()
+block = BindParser(None, None)
 
 # ---------- TOKEN UNIONS
 binary_operator = PLUS | MINUS | STAR | SLASH | PERCENT
 binary_operator.name = "BINOP"
 unary_operator = PLUS | MINUS
 unary_operator.name = "UNOP"
-type_identifier = (INT | FLOAT).bind(lambda x: x[0])
-type_identifier.name = "TYPE"
+
+_type_conversion = {Token.INT: Integer, Token.FLOAT: Float}
+_type = (INT | FLOAT).bind(lambda x: _type_conversion[x[0]])
+_type.name = "TYPE"
+identifier = IDENTIFIER.bind(lambda x: x[1])
 
 # ---------- EXPRESSIONS
-variable = IDENTIFIER.bind(lambda x: Variable(x[1]))
-immidiate = (FLOAT | INTEGER).bind(lambda x: Immidiate(*x))
+variable = identifier.bind(lambda x: Variable(x))
+_immidiate_conversion = {Token.INTEGER: Integer, Token.FLOAT: Float}
+immidiate = (INTEGER).bind(lambda x: Immidiate(_immidiate_conversion[x[0]], x[1]))
 factor.parsers = (variable | immidiate | (LPAREN & expression & RPAREN).bind(lambda x: x[1]) | (unary_operator & factor).bind(lambda x: UnaryOp(x[0][0], x[1]))).parsers
 factor.name = "FACT"
 binary_operation_l1 = (factor & (STAR | SLASH | PERCENT) & term).bind(lambda x: BinaryOp(x[0], x[1][0], x[2]))
@@ -189,13 +71,13 @@ expression.name = "EXP"
 unoptimized_expression = deepcopy(expression)
 
 # ---------- SIMPLE STATEMENTS
-assignment = (IDENTIFIER & EQUALS & expression).bind(lambda x: Assignment(x[0][1], x[2]))
+assignment = (identifier & EQUALS & expression).bind(lambda x: Assignment(x[0], x[2]))
 assignment.name = "ASSIGN"
 def extract_definition(x):
     if isinstance(x[1], Assignment):
         return Definition(x[0], x[1].identifier, x[1].expression)
     return Definition(*x)
-definition = (type_identifier & (assignment | IDENTIFIER)).bind(extract_definition)
+definition = (_type & (assignment | IDENTIFIER)).bind(extract_definition)
 definition.name = "DEF"
 return_statement = (RETURN & expression).bind(lambda x: Return(x[1]))
 return_statement.name = "RTRN_STMT"
@@ -206,19 +88,21 @@ statement = (statement_body & SEMICOLON).bind(lambda x: x[0]) | SEMICOLON.bind(l
 statement.name = "STATEMENT"
 
 
-block = LBRACE & statement.many() & RBRACE
+_tmp = (LBRACE & (statement | block).many() & RBRACE).bind(lambda x: Block(x[1]))
+block.parsers = _tmp.parsers
+block.callback = _tmp.callback
 block.name = "BLOCK"
-parameter = (type_identifier & IDENTIFIER).bind(lambda x: [x[0], x[1][1]])
+parameter = (_type & identifier).bind(lambda x: Parameter(*x))
 parameter.name = "PARAM"
 def extract_parameter_list(x: list):
     if len(x) == 0: return x
     return [x[0], *map(lambda a: a[1],x[1])]
 parameter_list = (parameter & (COMMA & parameter).many()).default([]).bind(extract_parameter_list)
 parameter_list.name = "PARAMS"
-function = (type_identifier & IDENTIFIER & LPAREN & parameter_list & RPAREN & block).bind(lambda x: Function(x[0], x[1], x[3], x[-2]))
+function = (_type & identifier & LPAREN & parameter_list & RPAREN & block).bind(lambda x: Function(x[0], x[1], x[3], x[-1]))
 function.name = "FUNC"
 
-top = (function | statement).many().bind(lambda x: Top(x))
+top = (function | statement).many().bind(lambda x: Top(Block(x)))
 top.name = "TOP"
 
 OrOptimizer.optimize(top)
@@ -231,6 +115,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--string", type=str)
     parser.add_argument("-v", "--verbose", action="store_true")
+    # required
+    parser.add_argument("-o", "--output", type=argparse.FileType("w"), required=True)
     parser.add_argument("input", nargs="?", type=argparse.FileType("r"), default=sys.stdin)
     args = parser.parse_args()
     provided_string = args.string is not None
@@ -243,7 +129,17 @@ def main():
         debug.init(Parser, Source)
     
     source = Source(args.string if provided_string else args.input.read())
-    pprint(top.parse(source))
+    ast = top.parse(source)
+    pprint(ast)
+    program = str(Arm64Program.build(ast))
+    with open(f"{args.output.name}.s", "w") as f:
+        f.write(program)
+    # now assemble with as
+    os.system(f"as {args.output.name}.s -o {args.output.name}.o")
+    # now link with ld
+    os.system(f"ld {args.output.name}.o -o {args.output.name} -lSystem -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk")
+    
+    
 
 if __name__ == "__main__":
     main()
