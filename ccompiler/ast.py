@@ -75,6 +75,7 @@ class MaxOffset:
     def __init__(self):
         self.value = 0
     def check(self, value: int):
+        value = value + value % 16
         self.value = max(self.value, value)
 
 
