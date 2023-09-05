@@ -4,7 +4,7 @@ from ccompiler.tokens import Token
 from ccompiler.optim import OrOptimizer, AndOptimizer
 from ccompiler.parsers import Source, TokenParser
 from ccompiler.compiler import unoptimized_expression, expression, parameter_list
-from ccompiler.ast import BinaryOp, UnaryOp, Immidiate, Parameter, Integer
+from ccompiler.ast import BinaryExpression, UnaryExpression, Constant, Parameter, Integer
 
 INT = TokenParser(Token.INT)
 IDENTIFIER = TokenParser(Token.IDENTIFIER)
@@ -28,11 +28,11 @@ def test_and():
 def test_optimized_and():
     optimized_and_expression = deepcopy(unoptimized_expression)
     optimized_and_expression.traverse(AndOptimizer(), backwards=True)
-    assert optimized_and_expression.parse(Source("1 + 2")) == BinaryOp(Immidiate(Integer, '1'), Token.PLUS, Immidiate(Integer, '2'))
-    assert optimized_and_expression.parse(Source("1 - 2")) == BinaryOp(Immidiate(Integer, '1'), Token.MINUS, Immidiate(Integer, '2'))
-    assert optimized_and_expression.parse(Source("(1 + 2) - 3")) == BinaryOp(BinaryOp(Immidiate(Integer, '1'), Token.PLUS, Immidiate(Integer, '2')), Token.MINUS, Immidiate(Integer, '3'))
-    assert optimized_and_expression.parse(Source("-5*4")) == BinaryOp(UnaryOp(Token.MINUS, Immidiate(Integer, '5')), Token.STAR, Immidiate(Integer, '4'))
-    assert optimized_and_expression.parse(Source("-5/5-")) == BinaryOp(UnaryOp(Token.MINUS, Immidiate(Integer, '5')), Token.SLASH, Immidiate(Integer, '5'))
+    assert optimized_and_expression.parse(Source("1 + 2")) == BinaryExpression(Constant(Integer, '1'), Token.PLUS, Constant(Integer, '2'))
+    assert optimized_and_expression.parse(Source("1 - 2")) == BinaryExpression(Constant(Integer, '1'), Token.MINUS, Constant(Integer, '2'))
+    assert optimized_and_expression.parse(Source("(1 + 2) - 3")) == BinaryExpression(BinaryExpression(Constant(Integer, '1'), Token.PLUS, Constant(Integer, '2')), Token.MINUS, Constant(Integer, '3'))
+    assert optimized_and_expression.parse(Source("-5*4")) == BinaryExpression(UnaryExpression(Token.MINUS, Constant(Integer, '5')), Token.STAR, Constant(Integer, '4'))
+    assert optimized_and_expression.parse(Source("-5/5-")) == BinaryExpression(UnaryExpression(Token.MINUS, Constant(Integer, '5')), Token.SLASH, Constant(Integer, '5'))
 
 def test_optimizer_and_or_equals_or_and():
     and_or = deepcopy(unoptimized_expression)

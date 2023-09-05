@@ -1,5 +1,5 @@
 from abc import abstractmethod, abstractclassmethod
-from ccompiler.util import Visitable
+from ccompiler.abstract import Visitable
 from ccompiler.parsers import Visitor, Parser, OrParser, AndParser
 
 

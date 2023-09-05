@@ -3,7 +3,7 @@ from copy import deepcopy
 from ccompiler.tokens import Token
 from ccompiler.optim import OrOptimizer, AndOptimizer
 from ccompiler.parsers import Source, Parser, TokenParser, OrParser, BindParser
-from ccompiler.ast import BinaryOp, UnaryOp, Immidiate, Variable, Assignment, Definition, Return, EmptyStatement, Top, Function, Parameter, Block, Integer, Float, Arm64Program, Scope
+from ccompiler.ast import BinaryExpression, UnaryExpression, Constant, Variable, Assignment, Definition, Return, EmptyStatement, Top, Function, Parameter, Block, Integer, Float, Arm64Emitter
 
 
 
@@ -54,15 +54,15 @@ identifier = IDENTIFIER.bind(lambda x: x[1])
 
 # ---------- EXPRESSIONS
 variable = identifier.bind(lambda x: Variable(x))
-_immidiate_conversion = {Token.INTEGER: Integer, Token.FLOAT: Float}
-immidiate = (INTEGER).bind(lambda x: Immidiate(_immidiate_conversion[x[0]], x[1]))
-factor.parsers = (variable | immidiate | (LPAREN & expression & RPAREN).bind(lambda x: x[1]) | (unary_operator & factor).bind(lambda x: UnaryOp(x[0][0], x[1]))).parsers
+_constant_conversion = {Token.INTEGER: Integer, Token.FLOAT: Float}
+constant = (INTEGER).bind(lambda x: Constant(_constant_conversion[x[0]], x[1]))
+factor.parsers = (variable | constant | (LPAREN & expression & RPAREN).bind(lambda x: x[1]) | (unary_operator & factor).bind(lambda x: UnaryExpression(x[0][0], x[1]))).parsers
 factor.name = "FACT"
-binary_operation_l1 = (factor & (STAR | SLASH | PERCENT) & term).bind(lambda x: BinaryOp(x[0], x[1][0], x[2]))
+binary_operation_l1 = (factor & (STAR | SLASH | PERCENT) & term).bind(lambda x: BinaryExpression(x[0], x[1][0], x[2]))
 binary_operation_l1.name = "BINOP_L1"
 term.parsers = (binary_operation_l1 | factor).parsers
 term.name = "TERM"
-binary_operation_l2 = (term & (PLUS | MINUS) & expression).bind(lambda x: BinaryOp(x[0], x[1][0], x[2]))
+binary_operation_l2 = (term & (PLUS | MINUS) & expression).bind(lambda x: BinaryExpression(x[0], x[1][0], x[2]))
 binary_operation_l2.name = "BINOP_L2"
 expression.parsers = (binary_operation_l2 | term).parsers
 expression.name = "EXP"
@@ -131,14 +131,9 @@ def main():
     source = Source(args.string if provided_string else args.input.read())
     ast = top.parse(source)
     pprint(ast)
-    program = str(Arm64Program.build(ast))
-    with open(f"{args.output.name}.s", "w") as f:
+    program = Arm64Emitter()(ast)
+    with open(f"{args.output.name}", "w") as f:
         f.write(program)
-    # now assemble with as
-    os.system(f"as {args.output.name}.s -o {args.output.name}.o")
-    # now link with ld
-    os.system(f"ld {args.output.name}.o -o {args.output.name} -lSystem -syslibroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk")
-    
     
 
 if __name__ == "__main__":

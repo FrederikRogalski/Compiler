@@ -1,6 +1,6 @@
 import re
 from ccompiler.tokens import Token
-from ccompiler.util import Visitor, Visitable
+from ccompiler.abstract import Visitor, Visitable
 from collections import OrderedDict
 from abc import abstractmethod, abstractproperty
 

@@ -1,85 +1,13 @@
-from enum import Enum
+from __future__ import annotations
+from abc import ABC
 from numbers import Number
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from ccompiler.tokens import Token
-from abc import abstractmethod, ABC
-from collections import OrderedDict
-from string import Template
 
 
-class Scope(dict):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.offset = 0
-        self.max_offset = kwargs.get("max_offset", MaxOffset())
-    def create_var(self, identifier: str, size: int = 8) -> int:
-        """address is offset from stack pointer"""
-        # early return if variable was defined before
-        if identifier in self: return self[identifier]
-        self[identifier] = self.offset
-        self.offset += size
-        self.max_offset.check(self.offset)
-        return self[identifier]
-    def __getitem__(self, key):
-        if key not in self:
-            raise Exception(f"Variable '{key}' not found")
-        return super().__getitem__(key)
-    def create_child(self):
-        return Scope(self, max_offset=self.max_offset)
-
-class Program(ABC):
-    header: list[str]
-    code: list[str]
-    text: list[str]
-    
-    def __init__(self):
-        self.code = []
-        self.text = []
-    
-    @classmethod
-    def build(cls, ast):
-        o = cls()
-        o.code = ast.emit(Scope())
-        return o
-        
-    
-    def create_local_var(self, identifier: str, size: int = 8) -> int:
-        """address is offset from stack pointer"""
-        assert identifier not in self.variables[self.depth],\
-            f"Redefinition of variable {identifier}"
-        # variable offset from sp is last variable offset from sp + size
-        self.variables[self.depth][identifier] = \
-            self.variables[self._depth][next(reversed(self.variables[self._depth]))] + size
-        self.max_offset_sp = max(self.variables[self.depth][identifier], self.max_offset_sp)
-        return self.variables[self.depth][identifier]
-    
-    def get_local_var(self, identifier: str):
-        for scope in reversed(self.variables[:self.depth]):
-            if identifier in scope:
-                return scope[identifier]
-        raise Exception(f"Variable {identifier} not found")
-    
-    def __str__(self):
-        return "\n".join([*self.header, *self.code, *self.text])
-
-class Arm64Program(Program):
-    def __init__(self):
-        super().__init__()
-        self.header = [
-            ".globl _main",
-            ".p2align 2"
-        ]
-
-class MaxOffset:
-    value: int
-    def __init__(self):
-        self.value = 0
-    def check(self, value: int):
-        value = value + value % 16
-        self.value = max(self.value, value)
-
-
-
+@dataclass
+class AstNode(ABC):
+    pass
 class Type(ABC):
     size: int
 
@@ -88,43 +16,14 @@ class Integer(Type):
 
 class Float(Type):
     size = 4
-    
 
 @dataclass
-class AstNode(ABC):
-    def emit(self, scope: Scope): 
-        raise NotImplementedError(f"emit not implemented for {self.__class__.__name__}")
-    
-class Block(list, AstNode):
-    def emit(self, scope: Scope):
-        scope = scope.create_child()
-        inner = [instruction for sublist in map(lambda x: x.emit(scope), self) for instruction in sublist]
-        return inner
+class Block(AstNode):
+    statements: list
 
 @dataclass
 class Top(AstNode):
     body: Block
-    def emit(self, scope: Scope):
-        inner = self.body.emit(scope)
-        return inner
-        
-
-@dataclass
-class Variable(AstNode):
-    identifier: str
-    def emit(self, scope: Scope):
-        return [
-            f"ldr w8, [sp, #{scope[self.identifier]}]"
-        ]
-    
-@dataclass
-class Immidiate(AstNode):
-    type_identifier: Token
-    value: Number
-    def emit(self, scope: Scope):
-        return [
-            f"mov w8, #{self.value}",
-        ]
         
 
 @dataclass
@@ -133,16 +32,6 @@ class Function(AstNode):
     identifier: str
     parameter_list: list
     body: Block
-    def emit(self, scope: Scope):
-        inner = self.body.emit(scope)
-        stack_size = scope.max_offset.value
-        # now we know the stack size and can add it to the scope
-        # TODO: variables on stack or reversed in comparison to standard.
-        return [
-            f"_{self.identifier}:",
-            f"sub sp, sp, #{stack_size}", # TODO: Does this have to be aligned by 16?
-            *inner
-        ]
 
 @dataclass
 class EmptyStatement(AstNode):
@@ -153,66 +42,118 @@ class Expression(AstNode):
     pass
 
 @dataclass
-class UnaryOp(AstNode):
+class Variable(Expression):
+    identifier: str
+    
+@dataclass
+class Constant(Expression):
+    type_identifier: Token
+    value: Number
+
+@dataclass
+class UnaryExpression(Expression):
     operator: Token
     expression: Expression
 
 @dataclass
-class BinaryOp(AstNode):
+class BinaryExpression(Expression):
     left: Expression
     operator: Token
     right: Expression
-    _operator_map = {
-        Token.PLUS: "add",
-        Token.MINUS: "sub",
-        Token.STAR: "mul",
-        Token.SLASH: "sdiv",
-        Token.PERCENT: "srem",
-    }
-        
-    def emit(self, scope: Scope):
-        return [
-            *self.left.emit(scope),
-            "mov w9, w8",
-            *self.right.emit(scope),
-            f"{self._operator_map[self.operator]} w8, w9, w8"
-        ]
 
 @dataclass
 class Return(AstNode):
     expression: Expression
-    def emit(self, scope: Scope):
-        return [
-            *self.expression.emit(scope),
-            "mov w0, w8",
-            f"add sp, sp, #{scope.max_offset.value}",
-            "ret"
-        ]
 
 @dataclass
 class Assignment(AstNode):
     identifier: str
     expression: Expression
-    def emit(self, scope: Scope):
-        return [
-            *self.expression.emit(scope),
-            f"str w8, [sp, #{scope[self.identifier]}]"
-        ]
 
 @dataclass
 class Definition(AstNode):
     type_identifier: Token
     identifier: str
     expression: Expression = None
-    def emit(self, scope: Scope):
-        address = scope.create_var(self.identifier)
-        if self.expression is None: return []
-        return [
-            *self.expression.emit(scope),
-            f"str w8, [sp, #{address}]"
-        ]
 
 @dataclass
 class Parameter(AstNode):
     type_identifier: Token
     identifier: str
+
+
+class Arm64Emitter:
+    # depth of 0 means global scope
+    # functions are at depth 1
+    depth: int
+    text: list[str]
+    symbols: dict[str, list[Symbol]]
+    # the current stack offset
+    offset: int
+    # the maximum stack offset
+    stack_size: int
+    _token_type_conversion = {Token.INTEGER: Integer, Token.FLOAT: Float}
+    _type_directives_conversion = {Integer: ".word", Float: ".float"}
+    
+    @dataclass
+    class Symbol:
+        _type: Type
+    
+    class LocalSymbol(Symbol):
+        depth: int = 0
+        # offset from (stack pointer + stack_size)
+        offset: int = None
+        line_of_declaration: int
+        lines_of_use: list[int] = field(default_factory=list)
+        
+    
+    class GlobalSymbol(Symbol):
+        value: Number
+        
+    def __init__(self):
+        pass
+    def __call__(self, ast: AstNode):
+        match ast:
+            case Top(body):
+                self.depth = 0
+                self.text = []
+                global_symbols = {}
+                for statement in body.statements:
+                    match statement:
+                        case Definition(type_identifier, identifier, expression):
+                            assert expression is None or isinstance(expression, Constant), "Global variables must be initialized with compile time constants"
+                            symbol = self.Symbol(self._token_type_conversion[type_identifier])
+                            global_symbols[identifier] = symbol
+                            self.symbols[identifier] = symbol
+                        case Function():
+                            self(statement)
+                        case _:
+                            raise NotImplementedError(statement)
+                # resolve global variables
+                for identifier, symbol in global_symbols.items():
+                    self.text.extend([
+                        f"_{identifier}:",
+                        f"  .{self._type_directives_conversion[symbol._type]} {symbol.value}"
+                    ])
+            case Block(statements):
+                self.depth += 1
+                for statement in statements:
+                    self(statement)
+                self.depth -= 1
+            case Function(return_type, identifier, parameter_list, body):
+                self.stack_size = 0
+                self.text.extend([
+                    f"  .globl _{identifier}",
+                     "  .align      2",
+                ])
+                self(body)
+                # resolve local variables
+                for symbol in self.local_symbols.values():
+                    self.text[symbol.line] = f"str w8 [sp, #{self.stack_size-symbol.offset}]"
+            case Definition(type_identifier, identifier, expression):
+                self(expression)
+                symbol = self.Symbol(self._token_type_conversion[type_identifier], self.depth, self.stack_size, expression.line)
+                
+            case _:
+                raise NotImplementedError(ast)
+                
